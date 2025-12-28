@@ -321,7 +321,7 @@ export default function PayloadsPage() {
                                         <div className="mt-3 ml-1 pl-3 border-l border-amber-500/30 space-y-2">
                                             <div className="flex items-center gap-2 text-sm text-muted-foreground">
                                                 <Radio className="w-3.5 h-3.5 text-amber-400" />
-                                                <span>Popup controller for cross-page persistence</span>
+                                                <span>Auxiliary window for cross-page persistence</span>
                                             </div>
                                             <div className="flex items-center gap-2 text-sm text-muted-foreground">
                                                 <Radio className="w-3.5 h-3.5 text-amber-400" />
@@ -332,7 +332,7 @@ export default function PayloadsPage() {
                                                 <span>Capture request/response data in real-time</span>
                                             </div>
                                             <p className="text-xs text-amber-400/70 mt-2">
-                                                ⚠️ May be blocked by popup blockers. Falls back to single-page mode if blocked.
+                                                ⚠️ Requires user interaction. May be blocked by popup blockers.
                                             </p>
                                         </div>
                                     )}

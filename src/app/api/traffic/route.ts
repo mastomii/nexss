@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { query, generateId } from '@/lib/db';
+import { query, queryOne, generateId, Setting } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { corsHeaders } from '@/lib/cors';
+import crypto from 'crypto';
 
 interface InterceptedTraffic {
     id: string;
@@ -17,6 +18,33 @@ interface InterceptedTraffic {
     captured_at: string;
 }
 
+// AES-256-CBC decryption (matches client encryption)
+function decryptAES(encrypted: string, key: string): string | null {
+    try {
+        const keyBuffer = Buffer.from(key, 'hex');
+        const iv = Buffer.from(encrypted.substring(0, 32), 'hex');
+        const encryptedData = Buffer.from(encrypted.substring(32), 'hex');
+        const decipher = crypto.createDecipheriv('aes-256-cbc', keyBuffer, iv);
+        let decrypted = decipher.update(encryptedData);
+        decrypted = Buffer.concat([decrypted, decipher.final()]);
+        return decrypted.toString('utf8');
+    } catch {
+        return null;
+    }
+}
+
+async function getSetting(key: string, defaultValue: string): Promise<string> {
+    try {
+        const setting = await queryOne<Setting>(
+            'SELECT value FROM settings WHERE key = $1',
+            [key]
+        );
+        return setting?.value || defaultValue;
+    } catch {
+        return defaultValue;
+    }
+}
+
 // Handle CORS preflight
 export async function OPTIONS(request: NextRequest) {
     const headers: Record<string, string> = { ...corsHeaders };
@@ -30,7 +58,38 @@ export async function OPTIONS(request: NextRequest) {
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { rid, type, method, url, reqHeaders, reqBody, resHeaders, resBody, status } = body;
+        let { rid, type, method, url, reqHeaders, reqBody, resHeaders, resBody, status, encrypted, data } = body;
+
+        // Handle encrypted payload
+        if (encrypted && data) {
+            const persistentKey = await getSetting('persistent_key', '');
+            if (persistentKey && persistentKey.length === 64) {
+                const decrypted = decryptAES(data, persistentKey);
+                if (decrypted) {
+                    try {
+                        const parsed = JSON.parse(decrypted);
+                        type = parsed.type;
+                        method = parsed.method;
+                        url = parsed.url;
+                        reqHeaders = parsed.reqHeaders;
+                        reqBody = parsed.reqBody;
+                        resHeaders = parsed.resHeaders;
+                        resBody = parsed.resBody;
+                        status = parsed.status;
+                    } catch {
+                        return NextResponse.json(
+                            { error: 'Invalid encrypted payload' },
+                            { status: 400, headers: corsHeaders }
+                        );
+                    }
+                } else {
+                    return NextResponse.json(
+                        { error: 'Decryption failed' },
+                        { status: 400, headers: corsHeaders }
+                    );
+                }
+            }
+        }
 
         if (!rid || !type) {
             return NextResponse.json(

@@ -31,6 +31,8 @@ import {
     ChevronDown,
     ChevronRight,
     ChevronLeft,
+    ChevronsDown,
+    ChevronsUp,
     Ban,
     AlertTriangle
 } from 'lucide-react';
@@ -138,6 +140,17 @@ export default function ReportDetailPage() {
             }
             return next;
         });
+    };
+
+    const expandAllTraffic = () => {
+        const allIds = paginatedTraffic
+            .filter(item => item.request_headers || item.request_body || item.response_headers || item.response_body)
+            .map(item => item.id);
+        setExpandedTraffic(new Set(allIds));
+    };
+
+    const collapseAllTraffic = () => {
+        setExpandedTraffic(new Set());
     };
 
     // Paginated traffic data
@@ -842,6 +855,24 @@ export default function ReportDetailPage() {
                                         </Badge>
                                     </div>
                                     <div className="flex items-center gap-2">
+                                        {trafficData.length > 0 && (
+                                            <>
+                                                <button
+                                                    onClick={expandAllTraffic}
+                                                    className="px-2 py-1 text-xs text-muted-foreground hover:text-white hover:bg-[#27272a] rounded transition-colors"
+                                                    title="Expand all"
+                                                >
+                                                    <ChevronsDown className="w-4 h-4" />
+                                                </button>
+                                                <button
+                                                    onClick={collapseAllTraffic}
+                                                    className="px-2 py-1 text-xs text-muted-foreground hover:text-white hover:bg-[#27272a] rounded transition-colors"
+                                                    title="Collapse all"
+                                                >
+                                                    <ChevronsUp className="w-4 h-4" />
+                                                </button>
+                                            </>
+                                        )}
                                         {trafficLoading && (
                                             <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
                                         )}
