@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query, queryOne, generateId } from '@/lib/db';
 import { getSession } from '@/lib/auth';
+import { corsHeaders } from '@/lib/cors';
 import crypto from 'crypto';
 
 interface PersistSession {
@@ -16,17 +17,6 @@ interface PersistSession {
 interface Setting {
     value: string;
 }
-
-// CORS headers for all responses - MUST allow everything for blind XSS listeners
-const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS, HEAD, PATCH',
-    'Access-Control-Allow-Headers': '*',
-    'Access-Control-Allow-Credentials': 'true',
-    'Access-Control-Max-Age': '86400',
-    'Access-Control-Allow-Private-Network': 'true',
-    'Access-Control-Expose-Headers': '*',
-};
 
 // Get encryption key from settings
 async function getEncryptionKey(): Promise<string | null> {

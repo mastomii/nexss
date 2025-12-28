@@ -3,6 +3,7 @@ import { query, generateId } from '@/lib/db';
 import { getClientIP, compressString } from '@/lib/utils';
 import { getObjectStorageConfig, uploadToStorage } from '@/lib/object-storage';
 import { sendXSSNotification } from '@/lib/telegram';
+import { corsHeaders } from '@/lib/cors';
 import { writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
 import { existsSync } from 'fs';
@@ -21,17 +22,6 @@ interface CallbackData {
     ip?: string;
     extra?: Record<string, unknown>;
 }
-
-// CORS headers for all responses - MUST allow everything for blind XSS listeners
-const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS, HEAD, PATCH',
-    'Access-Control-Allow-Headers': '*',
-    'Access-Control-Allow-Credentials': 'true',
-    'Access-Control-Max-Age': '86400',
-    'Access-Control-Allow-Private-Network': 'true',
-    'Access-Control-Expose-Headers': '*',
-};
 
 function jsonResponse(data: unknown, status = 200) {
     return NextResponse.json(data, {

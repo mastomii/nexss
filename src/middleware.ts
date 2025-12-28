@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { jwtVerify } from 'jose';
+import { corsHeaders } from '@/lib/cors';
 
 const JWT_SECRET = new TextEncoder().encode(
     process.env.JWT_SECRET || 'fallback-secret-change-me'
@@ -30,17 +31,6 @@ const publicApiRoutes = [
 
 export async function middleware(request: NextRequest) {
     const { pathname } = request.nextUrl;
-
-    // CORS headers for payload APIs
-    const corsHeaders = {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS, HEAD, PATCH',
-        'Access-Control-Allow-Headers': '*',
-        'Access-Control-Allow-Credentials': 'true',
-        'Access-Control-Max-Age': '86400',
-        'Access-Control-Allow-Private-Network': 'true',
-        'Access-Control-Expose-Headers': '*',
-    };
 
     // Check if this is a public API route (for payload)
     const isPublicApiRoute = publicApiRoutes.some(route => pathname.startsWith(route));
