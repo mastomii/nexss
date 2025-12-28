@@ -87,6 +87,7 @@ export interface ReportData {
   dom: string | null;
   screenshot: string | null;
   screenshot_storage: string | null; // 'local', 's3', 'gcs', 'db'
+  screenshot_error: string | null; // Error message if screenshot capture failed
   localstorage: string | null;
   sessionstorage: string | null;
   extra: Record<string, unknown> | null;

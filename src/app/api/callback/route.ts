@@ -14,6 +14,7 @@ interface CallbackData {
     cookies?: string;
     dom?: string;
     screenshot?: string;
+    screenshot_error?: string;
     localstorage?: string;
     sessionstorage?: string;
     'user-agent'?: string;
@@ -168,7 +169,6 @@ export async function POST(request: NextRequest) {
                     if (result.success && result.url) {
                         screenshotPath = result.url;
                         screenshotStorage = 's3';
-                        console.log(`[NeXSS] Screenshot uploaded to object storage: ${key}`);
                     } else {
                         // Fallback to local storage
                         console.error('[NeXSS] Object storage upload failed, falling back to local:', result.error);
@@ -186,7 +186,6 @@ export async function POST(request: NextRequest) {
                     
                     screenshotPath = `/screenshots/${fileName}`;
                     screenshotStorage = 'local';
-                    console.log(`[NeXSS] Screenshot saved locally: ${screenshotPath}`);
                 }
             } catch (err) {
                 console.error('[NeXSS] Failed to save screenshot:', err);
@@ -202,7 +201,6 @@ export async function POST(request: NextRequest) {
                     await writeFile(filePath, buffer);
                     screenshotPath = `/screenshots/${fileName}`;
                     screenshotStorage = 'local';
-                    console.log(`[NeXSS] Screenshot saved locally (fallback): ${screenshotPath}`);
                 } catch (localErr) {
                     console.error('[NeXSS] Local fallback also failed:', localErr);
                     screenshotPath = null;
@@ -216,22 +214,21 @@ export async function POST(request: NextRequest) {
         // screenshot_storage indicates where it's stored: 'local', 's3', 'db' (legacy), or null
         const reportDataId = generateId();
         await query(
-            `INSERT INTO reports_data (id, report_id, dom, screenshot, screenshot_storage, localstorage, sessionstorage, extra, compressed)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+            `INSERT INTO reports_data (id, report_id, dom, screenshot, screenshot_storage, screenshot_error, localstorage, sessionstorage, extra, compressed)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
             [
                 reportDataId,
                 reportId,
                 dom,
                 screenshotPath,
                 screenshotStorage,
+                data.screenshot_error || null,
                 data.localstorage || null,
                 data.sessionstorage || null,
                 data.extra ? JSON.stringify(data.extra) : null,
                 compressed,
             ]
         );
-
-        console.log(`[NeXSS] Report captured: ${reportId} from ${origin}`);
 
         // Send Telegram notification (async, don't wait)
         sendXSSNotification({

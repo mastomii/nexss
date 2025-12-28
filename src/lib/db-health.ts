@@ -24,6 +24,7 @@ export interface HealthCheckResult {
     details?: {
         missingTables?: string[];
         missingColumns?: { table: string; columns: string[] }[];
+        typeMismatch?: { table: string; column: string; expected: string; actual: string }[];
         connectionError?: string;
     };
 }
@@ -81,6 +82,7 @@ const EXPECTED_SCHEMA: TableSchema[] = [
             { name: 'dom', type: 'text' },
             { name: 'screenshot', type: 'text' },
             { name: 'screenshot_storage', type: 'character varying' },
+            { name: 'screenshot_error', type: 'text' },
             { name: 'localstorage', type: 'text' },
             { name: 'sessionstorage', type: 'text' },
             { name: 'extra', type: 'jsonb' },
@@ -116,7 +118,24 @@ const EXPECTED_SCHEMA: TableSchema[] = [
             { name: 'pending_command', type: 'text' },
             { name: 'last_response', type: 'text' },
             { name: 'last_response_at', type: 'timestamp with time zone' },
+            { name: 'session_status', type: 'character varying' },
             { name: 'created_at', type: 'timestamp with time zone' },
+        ],
+    },
+    {
+        name: 'intercepted_traffic',
+        columns: [
+            { name: 'id', type: 'character varying' },
+            { name: 'report_id', type: 'character varying' },
+            { name: 'traffic_type', type: 'character varying' },
+            { name: 'method', type: 'character varying' },
+            { name: 'url', type: 'text' },
+            { name: 'request_headers', type: 'text' },
+            { name: 'request_body', type: 'text' },
+            { name: 'response_headers', type: 'text' },
+            { name: 'response_body', type: 'text' },
+            { name: 'status_code', type: 'integer' },
+            { name: 'captured_at', type: 'timestamp with time zone' },
         ],
     },
 ];
@@ -252,27 +271,42 @@ export async function checkDatabaseHealth(): Promise<HealthCheckResult> {
 
         // Check 4: Check columns for existing tables
         const missingColumns: { table: string; columns: string[] }[] = [];
+        const typeMismatch: { table: string; column: string; expected: string; actual: string }[] = [];
 
         for (const tableSchema of EXPECTED_SCHEMA) {
             if (existingTables.includes(tableSchema.name)) {
                 const existingColumns = await getTableColumns(tableSchema.name);
-                const existingColumnNames = existingColumns.map(c => c.name);
+                const existingColumnMap = new Map(existingColumns.map(c => [c.name, c.type]));
                 const expectedColumnNames = tableSchema.columns.map(c => c.name);
-                const missing = expectedColumnNames.filter(c => !existingColumnNames.includes(c));
-                
+                const missing = expectedColumnNames.filter(c => !existingColumnMap.has(c));
+
                 if (missing.length > 0) {
                     missingColumns.push({ table: tableSchema.name, columns: missing });
+                }
+
+                // Check for type mismatches
+                for (const expectedCol of tableSchema.columns) {
+                    const actualType = existingColumnMap.get(expectedCol.name);
+                    if (actualType && actualType !== expectedCol.type) {
+                        typeMismatch.push({
+                            table: tableSchema.name,
+                            column: expectedCol.name,
+                            expected: expectedCol.type,
+                            actual: actualType,
+                        });
+                    }
                 }
             }
         }
 
-        if (missingTables.length > 0 || missingColumns.length > 0) {
+        if (missingTables.length > 0 || missingColumns.length > 0 || typeMismatch.length > 0) {
             return {
                 status: 'schema_mismatch',
-                message: 'Database schema is incomplete. Click "Sync Database" to add missing tables and columns.',
+                message: 'Database schema is incomplete or has type mismatches. Click "Sync Database" to fix.',
                 details: {
                     missingTables: missingTables.length > 0 ? missingTables : undefined,
                     missingColumns: missingColumns.length > 0 ? missingColumns : undefined,
+                    typeMismatch: typeMismatch.length > 0 ? typeMismatch : undefined,
                 },
             };
         }

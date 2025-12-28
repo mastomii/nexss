@@ -96,12 +96,31 @@ CREATE TABLE IF NOT EXISTS persistent_sessions (
     pending_command TEXT,
     last_response TEXT,
     last_response_at TIMESTAMP WITH TIME ZONE,
+    session_status VARCHAR(50) DEFAULT 'active',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_persistent_sessions_report_id ON persistent_sessions(report_id);
 CREATE INDEX IF NOT EXISTS idx_persistent_sessions_last_seen ON persistent_sessions(last_seen);
 CREATE INDEX IF NOT EXISTS idx_persistent_sessions_last_response_at ON persistent_sessions(last_response_at);
+
+-- Intercepted traffic table (Advanced Persistent Mode)
+CREATE TABLE IF NOT EXISTS intercepted_traffic (
+    id VARCHAR(26) PRIMARY KEY,
+    report_id VARCHAR(26) NOT NULL REFERENCES reports(id) ON DELETE CASCADE,
+    traffic_type VARCHAR(20) NOT NULL,
+    method VARCHAR(10),
+    url TEXT,
+    request_headers TEXT,
+    request_body TEXT,
+    response_headers TEXT,
+    response_body TEXT,
+    status_code INTEGER,
+    captured_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_intercepted_traffic_report_id ON intercepted_traffic(report_id);
+CREATE INDEX IF NOT EXISTS idx_intercepted_traffic_captured_at ON intercepted_traffic(captured_at);
 
 -- Update trigger function
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -132,7 +151,8 @@ INSERT INTO settings (key, value) VALUES
 ('app_tagline', 'Lightweight Blind XSS Listener'),
 ('timezone', 'UTC'),
 ('persistent_enabled', 'false'),
-('persistent_key', '')
+('persistent_key', ''),
+('advanced_persistent_enabled', 'false')
 ON CONFLICT (key) DO NOTHING;
 `;
 
@@ -204,7 +224,21 @@ const COLUMN_DEFINITIONS: Record<string, Record<string, string>> = {
         pending_command: 'TEXT',
         last_response: 'TEXT',
         last_response_at: 'TIMESTAMP WITH TIME ZONE',
+        session_status: 'VARCHAR(50) DEFAULT \'active\'',
         created_at: 'TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP',
+    },
+    intercepted_traffic: {
+        id: 'VARCHAR(26) PRIMARY KEY',
+        report_id: 'VARCHAR(26)',
+        traffic_type: 'VARCHAR(20) NOT NULL',
+        method: 'VARCHAR(10)',
+        url: 'TEXT',
+        request_headers: 'TEXT',
+        request_body: 'TEXT',
+        response_headers: 'TEXT',
+        response_body: 'TEXT',
+        status_code: 'INTEGER',
+        captured_at: 'TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP',
     },
 };
 
@@ -219,7 +253,7 @@ export async function POST() {
 
     // First check if there's actually an issue to fix
     const preCheckHealth = await checkDatabaseHealth();
-    
+
     // If database is already OK, reject the request
     if (preCheckHealth.status === 'ok') {
         return NextResponse.json({
@@ -262,13 +296,11 @@ export async function POST() {
 
             // For empty database or missing tables - run full create statements
             if (health.status === 'empty_database' || (health.details?.missingTables && health.details.missingTables.length > 0)) {
-                console.log('[Sync] Running full schema creation...');
                 await client.query(CREATE_STATEMENTS);
             }
 
             // Add missing columns if any
             if (health.details?.missingColumns && health.details.missingColumns.length > 0) {
-                console.log('[Sync] Adding missing columns...');
                 for (const item of health.details.missingColumns) {
                     for (const column of item.columns) {
                         const definition = COLUMN_DEFINITIONS[item.table]?.[column];
@@ -278,10 +310,9 @@ export async function POST() {
                                 .replace('PRIMARY KEY', '')
                                 .replace('NOT NULL', '')
                                 .trim();
-                            
+
                             try {
                                 await client.query(`ALTER TABLE ${item.table} ADD COLUMN IF NOT EXISTS ${column} ${simpleDefinition}`);
-                                console.log(`[Sync] Added column ${column} to ${item.table}`);
                             } catch (err) {
                                 console.error(`[Sync] Failed to add column ${column} to ${item.table}:`, err);
                             }
@@ -290,16 +321,31 @@ export async function POST() {
                 }
             }
 
+            // Fix type mismatches if any
+            if (health.details?.typeMismatch && health.details.typeMismatch.length > 0) {
+                for (const mismatch of health.details.typeMismatch) {
+                    const definition = COLUMN_DEFINITIONS[mismatch.table]?.[mismatch.column];
+                    if (definition) {
+                        // Extract just the type (TEXT, VARCHAR, etc.)
+                        const typeMatch = definition.match(/^(\w+(\s+\w+)*)/);
+                        const targetType = typeMatch ? typeMatch[1] : definition.split(' ')[0];
+
+                        try {
+                            await client.query(`ALTER TABLE ${mismatch.table} ALTER COLUMN ${mismatch.column} TYPE ${targetType} USING ${mismatch.column}::${targetType}`);
+                        } catch (err) {
+                            console.error(`[Sync] Failed to convert ${mismatch.table}.${mismatch.column} from ${mismatch.actual} to ${targetType}:`, err);
+                        }
+                    }
+                }
+            }
+
             // Insert default data
-            console.log('[Sync] Inserting default data...');
             await client.query(INSERT_DEFAULT_ADMIN);
             await client.query(INSERT_DEFAULT_SETTINGS);
 
             // Commit transaction
             await client.query('COMMIT');
             client.release();
-
-            console.log('[Sync] Database sync completed successfully');
 
             return NextResponse.json({
                 success: true,

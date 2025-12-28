@@ -65,9 +65,9 @@ USER nextjs
 # Expose port
 EXPOSE 3000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:3000/ || exit 1
+# Health check - use dedicated health endpoint with IPv4
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD wget -q --tries=1 http://127.0.0.1:3000/api/setup/health -O - > /dev/null 2>&1 || exit 1
 
 # Start the server
 CMD ["node", "server.js"]
