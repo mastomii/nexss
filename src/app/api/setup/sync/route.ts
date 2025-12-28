@@ -198,6 +198,7 @@ const COLUMN_DEFINITIONS: Record<string, Record<string, string>> = {
         dom: 'TEXT',
         screenshot: 'TEXT',
         screenshot_storage: 'VARCHAR(20) DEFAULT NULL',
+        screenshot_error: 'TEXT',
         localstorage: 'TEXT',
         sessionstorage: 'TEXT',
         extra: 'JSONB',
