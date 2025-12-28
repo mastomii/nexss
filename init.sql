@@ -134,7 +134,7 @@ CREATE INDEX idx_persistent_sessions_last_seen ON persistent_sessions(last_seen)
 CREATE INDEX idx_persistent_sessions_last_response_at ON persistent_sessions(last_response_at);
 
 -- ============================================
--- INTERCEPTED TRAFFIC TABLE (Advanced Persistent)
+-- INTERCEPTED TRAFFIC TABLE (Traffic Interception)
 -- ============================================
 CREATE TABLE intercepted_traffic (
     id VARCHAR(26) PRIMARY KEY, -- ULID

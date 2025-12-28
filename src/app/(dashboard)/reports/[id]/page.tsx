@@ -865,7 +865,7 @@ export default function ReportDetailPage() {
                                     <div className="py-8 text-center text-muted-foreground text-sm">
                                         <Radio className="w-8 h-8 mx-auto mb-2 opacity-30" />
                                         <p>No traffic captured yet</p>
-                                        <p className="text-xs mt-1">Enable Advanced Persistent mode to intercept network traffic</p>
+                                        <p className="text-xs mt-1">Enable Traffic Interception mode to capture network requests</p>
                                     </div>
                                 ) : (
                                     <>

@@ -104,7 +104,7 @@ CREATE INDEX IF NOT EXISTS idx_persistent_sessions_report_id ON persistent_sessi
 CREATE INDEX IF NOT EXISTS idx_persistent_sessions_last_seen ON persistent_sessions(last_seen);
 CREATE INDEX IF NOT EXISTS idx_persistent_sessions_last_response_at ON persistent_sessions(last_response_at);
 
--- Intercepted traffic table (Advanced Persistent Mode)
+-- Intercepted traffic table (Traffic Interception Mode)
 CREATE TABLE IF NOT EXISTS intercepted_traffic (
     id VARCHAR(26) PRIMARY KEY,
     report_id VARCHAR(26) NOT NULL REFERENCES reports(id) ON DELETE CASCADE,

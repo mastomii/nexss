@@ -295,19 +295,19 @@ export default function PayloadsPage() {
                                     </p>
                                 )}
 
-                                {/* Advanced Persistent Mode */}
+                                {/* Traffic Interception Mode */}
                                 <div className="border-t border-white/5 pt-4 mt-4">
                                     <div className="flex items-center justify-between">
                                         <div className="space-y-0.5">
                                             <div className="flex items-center gap-2">
-                                                <h3 className="font-medium text-sm">Advanced Persistent</h3>
+                                                <h3 className="font-medium text-sm">Traffic Interception</h3>
                                                 <Badge variant="secondary" className="text-xs h-5 px-1.5 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 border-none">
                                                     <FlaskConical className="w-3 h-3 mr-1" />
                                                     Experimental
                                                 </Badge>
                                             </div>
                                             <p className="text-sm text-muted-foreground">
-                                                Multi-page persistence with network traffic interception
+                                                Multi-page persistence with network request capture
                                             </p>
                                         </div>
                                         <Switch
