@@ -106,7 +106,6 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
                 const filePath = join(process.cwd(), 'data', 'screenshots', filename);
                 if (existsSync(filePath)) {
                     await unlink(filePath);
-                    console.log(`[NeXSS] Deleted local screenshot: ${reportData.screenshot}`);
                 }
             } catch (err) {
                 console.error('[NeXSS] Failed to delete local screenshot file:', err);
@@ -121,7 +120,6 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
                     const key = extractKeyFromUrl(reportData.screenshot);
                     if (key) {
                         await deleteFromStorage(config, key);
-                        console.log(`[NeXSS] Deleted screenshot from object storage: ${key}`);
                     }
                 }
             } catch (err) {

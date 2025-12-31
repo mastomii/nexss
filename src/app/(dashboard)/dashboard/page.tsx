@@ -41,7 +41,7 @@ interface DashboardData {
 }
 
 export default function DashboardPage() {
-    const { formatDate } = useSettings();
+    const { formatDateTime } = useSettings();
     const [data, setData] = useState<DashboardData | null>(null);
     const [loading, setLoading] = useState(true);
 
@@ -323,7 +323,7 @@ export default function DashboardPage() {
                                         <span className="px-2 py-0.5 rounded bg-[#141417] border border-white/5 text-muted-foreground text-xs font-medium">Viewed</span>
                                     )}
                                 </div>
-                                <span className="text-white/50 text-sm font-mono whitespace-nowrap">{formatDate(report.triggered_at)}</span>
+                                <span className="text-white/50 text-sm font-mono whitespace-nowrap">{formatDateTime(report.triggered_at)}</span>
                             </Link>
                         ))
                     ) : (

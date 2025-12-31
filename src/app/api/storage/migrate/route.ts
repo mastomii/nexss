@@ -132,7 +132,6 @@ export async function POST(request: Request) {
                 const localPath = join(process.cwd(), 'data', 'screenshots', filename);
                 
                 if (!existsSync(localPath)) {
-                    console.log(`[Migration] File not found: ${localPath}`);
                     failed++;
                     errors.push(`File not found: ${filename}`);
                     continue;
@@ -169,7 +168,6 @@ export async function POST(request: Request) {
                 }
 
                 migrated++;
-                console.log(`[Migration] Migrated: ${filename}`);
             } catch (err) {
                 failed++;
                 const error = err as Error;

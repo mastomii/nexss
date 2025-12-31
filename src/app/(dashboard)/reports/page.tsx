@@ -8,7 +8,13 @@ import {
     Trash2,
     AlertTriangle,
     Shield,
-    Search
+    Search,
+    CheckSquare,
+    Square,
+    MinusSquare,
+    ChevronDown,
+    ListChecks,
+    X
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -34,23 +40,33 @@ interface Pagination {
 }
 
 export default function ReportsPage() {
-    const { formatDate } = useSettings();
+    const { formatDateTime } = useSettings();
     const [reports, setReports] = useState<Report[]>([]);
-    const [pagination, setPagination] = useState<Pagination>({ page: 1, limit: 20, total: 0, totalPages: 0 });
+    const [pagination, setPagination] = useState<Pagination>({ page: 1, limit: 10, total: 0, totalPages: 0 });
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [showArchived, setShowArchived] = useState(false);
-    const [deleteModal, setDeleteModal] = useState<{ open: boolean; report: Report | null }>({ open: false, report: null });
+    const [deleteModal, setDeleteModal] = useState<{ open: boolean; report: Report | null; bulk?: boolean }>({ open: false, report: null });
     const [deleting, setDeleting] = useState(false);
+    const [perPage, setPerPage] = useState(10);
+    const [showPerPageDropdown, setShowPerPageDropdown] = useState(false);
+    
+    // Bulk selection state
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+    const [bulkActioning, setBulkActioning] = useState(false);
+    const [bulkMode, setBulkMode] = useState(false);
 
-    const fetchReports = async (page = 1) => {
+    const fetchReports = async (page = 1, limit = perPage) => {
         try {
             setLoading(true);
-            const res = await fetch(`/api/reports?page=${page}&limit=20&archived=${showArchived}`);
+            const res = await fetch(`/api/reports?page=${page}&limit=${limit}&archived=${showArchived}`);
             if (res.ok) {
                 const data = await res.json();
                 setReports(data.reports);
                 setPagination(data.pagination);
+                // Clear selection when data changes
+                setSelectedIds(new Set());
+                setBulkMode(false);
             }
         } finally {
             setLoading(false);
@@ -58,8 +74,8 @@ export default function ReportsPage() {
     };
 
     useEffect(() => {
-        fetchReports();
-    }, [showArchived]);
+        fetchReports(1, perPage);
+    }, [showArchived, perPage]);
 
     const handleArchive = async (id: string, archived: boolean) => {
         const res = await fetch(`/api/reports/${id}`, {
@@ -68,23 +84,91 @@ export default function ReportsPage() {
             body: JSON.stringify({ archived }),
         });
         if (res.ok) {
-            fetchReports(pagination.page);
+            fetchReports(pagination.page, perPage);
+        }
+    };
+
+    const handleBulkArchive = async (archive: boolean) => {
+        if (selectedIds.size === 0) return;
+        setBulkActioning(true);
+        try {
+            const res = await fetch('/api/reports/bulk', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ids: Array.from(selectedIds), archived: archive }),
+            });
+            if (res.ok) {
+                fetchReports(pagination.page, perPage);
+            }
+        } finally {
+            setBulkActioning(false);
+        }
+    };
+
+    const handleBulkDelete = async () => {
+        if (selectedIds.size === 0) return;
+        setBulkActioning(true);
+        try {
+            const idsArray = Array.from(selectedIds);
+            const res = await fetch('/api/reports/bulk', {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ids: idsArray }),
+            });
+            if (res.ok) {
+                setDeleteModal({ open: false, report: null });
+                setSelectedIds(new Set());
+                fetchReports(pagination.page, perPage);
+            }
+        } catch {
+            // Error handled silently
+        } finally {
+            setBulkActioning(false);
         }
     };
 
     const handleDelete = async () => {
+        if (deleteModal.bulk) {
+            await handleBulkDelete();
+            return;
+        }
         if (!deleteModal.report) return;
         setDeleting(true);
         const res = await fetch(`/api/reports/${deleteModal.report.id}`, { method: 'DELETE' });
         if (res.ok) {
             setDeleteModal({ open: false, report: null });
-            fetchReports(pagination.page);
+            fetchReports(pagination.page, perPage);
         }
         setDeleting(false);
     };
 
     const openDeleteModal = (report: Report) => {
         setDeleteModal({ open: true, report });
+    };
+
+    const openBulkDeleteModal = () => {
+        setDeleteModal({ open: true, report: null, bulk: true });
+    };
+
+    // Selection handlers
+    const toggleSelect = (id: string) => {
+        setSelectedIds(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) {
+                next.delete(id);
+            } else {
+                next.add(id);
+            }
+            return next;
+        });
+    };
+
+    const toggleSelectAll = () => {
+        if (selectedIds.size === filteredReports.length) {
+            setSelectedIds(new Set());
+        } else {
+            setSelectedIds(new Set(filteredReports.map(r => r.id)));
+        }
     };
 
     const filteredReports = reports.filter((report) => {
@@ -97,20 +181,28 @@ export default function ReportsPage() {
         );
     });
 
+    const allSelected = filteredReports.length > 0 && selectedIds.size === filteredReports.length;
+    const someSelected = selectedIds.size > 0 && selectedIds.size < filteredReports.length;
+
     return (
         <div className="space-y-6 pb-10">
             {/* Delete Modal */}
-            {deleteModal.open && deleteModal.report && (
+            {deleteModal.open && (
                 <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50">
                     <div className="bg-[#18181c] rounded-lg border border-[#27272a] w-full max-w-sm mx-4 p-5">
                         <div className="flex items-center gap-3 mb-3">
                             <div className="p-2 rounded-lg bg-red-500/10">
                                 <AlertTriangle className="w-4 h-4 text-red-500" />
                             </div>
-                            <h3 className="text-white font-medium">Delete Report</h3>
+                            <h3 className="text-white font-medium">
+                                {deleteModal.bulk ? `Delete ${selectedIds.size} Reports` : 'Delete Report'}
+                            </h3>
                         </div>
                         <p className="text-muted-foreground text-sm mb-5">
-                            Are you sure you want to delete this report? This action cannot be undone.
+                            {deleteModal.bulk 
+                                ? `Are you sure you want to delete ${selectedIds.size} selected reports? This action cannot be undone.`
+                                : 'Are you sure you want to delete this report? This action cannot be undone.'
+                            }
                         </p>
                         <div className="flex justify-end gap-2">
                             <button 
@@ -121,10 +213,10 @@ export default function ReportsPage() {
                             </button>
                             <button 
                                 onClick={handleDelete} 
-                                disabled={deleting}
+                                disabled={deleting || bulkActioning}
                                 className="px-3 py-1.5 text-sm bg-red-500 hover:bg-red-600 text-white rounded transition-colors disabled:opacity-50"
                             >
-                                {deleting ? 'Deleting...' : 'Delete'}
+                                {(deleting || bulkActioning) ? 'Deleting...' : 'Delete'}
                             </button>
                         </div>
                     </div>
@@ -149,6 +241,14 @@ export default function ReportsPage() {
                         />
                     </div>
                     <Button
+                        variant={bulkMode ? "secondary" : "outline"}
+                        onClick={() => { setBulkMode(!bulkMode); if (bulkMode) setSelectedIds(new Set()); }}
+                        className={cn("rounded text-xs px-3 py-1 h-8", bulkMode ? "bg-indigo-500/10 text-indigo-400 border-indigo-500/20" : "bg-[#18181c] text-muted-foreground border border-[#27272a] hover:text-white")}
+                    >
+                        {bulkMode ? <X className="w-4 h-4 mr-1.5" /> : <ListChecks className="w-4 h-4 mr-1.5" />}
+                        {bulkMode ? 'Cancel' : 'Bulk'}
+                    </Button>
+                    <Button
                         variant={showArchived ? "secondary" : "outline"}
                         onClick={() => setShowArchived(!showArchived)}
                         className={cn("rounded text-xs px-3 py-1 h-8", showArchived ? "bg-orange-500/10 text-orange-500 border-orange-500/20" : "bg-[#18181c] text-muted-foreground border border-[#27272a] hover:text-white")}
@@ -159,15 +259,72 @@ export default function ReportsPage() {
                 </div>
             </div>
 
+            {/* Bulk Actions Bar - Show when bulk mode is active */}
+            {bulkMode && (
+                <div className="bg-indigo-500/10 border border-indigo-500/20 rounded-lg px-4 py-2.5 flex items-center justify-between animate-in slide-in-from-top-2">
+                    <span className="text-indigo-400 text-sm font-medium">
+                        {selectedIds.size === 0 
+                            ? 'Select reports to perform bulk actions' 
+                            : `${selectedIds.size} ${selectedIds.size === 1 ? 'report' : 'reports'} selected`
+                        }
+                    </span>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => handleBulkArchive(!showArchived)}
+                            disabled={bulkActioning || selectedIds.size === 0}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-orange-500/10 text-orange-400 text-xs font-medium hover:bg-orange-500/20 transition-colors disabled:opacity-50"
+                        >
+                            <Archive className="w-3.5 h-3.5" />
+                            {showArchived ? 'Unarchive' : 'Archive'}
+                        </button>
+                        <button
+                            onClick={openBulkDeleteModal}
+                            disabled={bulkActioning || selectedIds.size === 0}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-red-500/10 text-red-400 text-xs font-medium hover:bg-red-500/20 transition-colors disabled:opacity-50"
+                        >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            Delete
+                        </button>
+                        {selectedIds.size > 0 && (
+                            <button
+                                onClick={() => setSelectedIds(new Set())}
+                                className="px-3 py-1.5 rounded text-muted-foreground text-xs hover:text-white transition-colors"
+                            >
+                                Clear
+                            </button>
+                        )}
+                    </div>
+                </div>
+            )}
+
             {/* Custom Table Implementation to Match Reference Image */}
             <div className="bg-[#18181c] rounded-lg overflow-hidden p-4 border border-[#27272a]">
                 {/* Table Header */}
-                <div className="grid grid-cols-[50px_minmax(200px,1fr)_120px_80px_120px_70px] gap-4 mb-4 px-3">
+                <div className={cn(
+                    "grid gap-4 mb-4 px-3",
+                    bulkMode 
+                        ? "grid-cols-[32px_35px_minmax(80px,1fr)_130px_60px_185px_70px]"
+                        : "grid-cols-[35px_minmax(80px,1fr)_130px_60px_185px_70px]"
+                )}>
+                    {bulkMode && (
+                        <button 
+                            onClick={toggleSelectAll}
+                            className="flex items-center justify-center text-muted-foreground hover:text-white transition-colors"
+                        >
+                            {allSelected ? (
+                                <CheckSquare className="w-4 h-4 text-indigo-400" />
+                            ) : someSelected ? (
+                                <MinusSquare className="w-4 h-4 text-indigo-400" />
+                            ) : (
+                                <Square className="w-4 h-4" />
+                            )}
+                        </button>
+                    )}
                     <span className="text-muted-foreground/50 text-xs uppercase tracking-wider font-semibold">ID</span>
                     <span className="text-muted-foreground/50 text-xs uppercase tracking-wider font-semibold">Origin</span>
-                    <span className="text-muted-foreground/50 text-xs uppercase tracking-wider font-semibold hidden sm:block">IP Address</span>
+                    <span className="text-muted-foreground/50 text-xs uppercase tracking-wider font-semibold hidden sm:block">IP</span>
                     <span className="text-muted-foreground/50 text-xs uppercase tracking-wider font-semibold">Status</span>
-                    <span className="text-muted-foreground/50 text-xs uppercase tracking-wider font-semibold">Date</span>
+                    <span className="text-muted-foreground/50 text-xs uppercase tracking-wider font-semibold">Triggered</span>
                     <span className="text-muted-foreground/50 text-xs uppercase tracking-wider font-semibold text-right">Action</span>
                 </div>
 
@@ -178,7 +335,29 @@ export default function ReportsPage() {
                         <div className="py-12 text-center text-muted-foreground text-sm">No reports found</div>
                     ) : (
                         filteredReports.map((report, idx) => (
-                            <div key={report.id} className="grid grid-cols-[50px_minmax(200px,1fr)_120px_80px_120px_70px] gap-4 py-2.5 px-3 hover:bg-white/5 rounded transition-colors items-center">
+                            <div 
+                                key={report.id} 
+                                className={cn(
+                                    "grid gap-2 py-2.5 px-3 rounded transition-colors items-center",
+                                    bulkMode 
+                                        ? "grid-cols-[32px_35px_minmax(80px,1fr)_130px_60px_185px_70px]"
+                                        : "grid-cols-[35px_minmax(80px,1fr)_130px_60px_185px_70px]",
+                                    selectedIds.has(report.id) ? "bg-indigo-500/10" : "hover:bg-white/5"
+                                )}
+                            >
+                                {bulkMode && (
+                                    <button 
+                                        onClick={() => toggleSelect(report.id)}
+                                        className="flex items-center justify-center text-muted-foreground hover:text-white transition-colors"
+                                    >
+                                        {selectedIds.has(report.id) ? (
+                                            <CheckSquare className="w-4 h-4 text-indigo-400" />
+                                        ) : (
+                                            <Square className="w-4 h-4" />
+                                        )}
+                                    </button>
+                                )}
+
                                 <span className="text-white/30 text-sm font-mono">#{(pagination.page - 1) * pagination.limit + idx + 1}</span>
 
                                 <Link href={`/reports/${report.id}`} className="flex items-center gap-2 overflow-hidden group cursor-pointer">
@@ -203,17 +382,30 @@ export default function ReportsPage() {
                                     )}
                                 </div>
 
-                                <span className="text-white/50 text-sm font-mono">
-                                    {formatDate(report.triggered_at)}
+                                <span className="text-white/50 text-sm font-mono whitespace-nowrap">
+                                    {formatDateTime(report.triggered_at)}
                                 </span>
 
                                 <div className="flex justify-end gap-1">
-                                    <Link href={`/reports/${report.id}`} className="h-7 w-7 flex items-center justify-center rounded text-muted-foreground hover:text-white hover:bg-white/10 transition-colors">
+                                    <Link href={`/reports/${report.id}`} className="h-7 w-7 flex items-center justify-center rounded text-muted-foreground hover:text-white hover:bg-white/10 transition-colors" title="View">
                                         <Eye className="h-4 w-4" />
                                     </Link>
                                     <button
+                                        onClick={() => handleArchive(report.id, !report.archived)}
+                                        className={cn(
+                                            "h-7 w-7 flex items-center justify-center rounded transition-colors",
+                                            report.archived 
+                                                ? "text-orange-400 hover:text-orange-300 hover:bg-orange-400/10" 
+                                                : "text-muted-foreground hover:text-orange-400 hover:bg-orange-400/10"
+                                        )}
+                                        title={report.archived ? "Unarchive" : "Archive"}
+                                    >
+                                        <Archive className="h-4 w-4" />
+                                    </button>
+                                    <button
                                         onClick={() => openDeleteModal(report)}
                                         className="h-7 w-7 flex items-center justify-center rounded text-muted-foreground hover:text-red-400 hover:bg-red-400/10 transition-colors"
+                                        title="Delete"
                                     >
                                         <Trash2 className="h-4 w-4" />
                                     </button>
@@ -223,13 +415,49 @@ export default function ReportsPage() {
                     )}
                 </div>
 
-                {/* Minimal Pagination */}
-                {pagination.totalPages > 1 && (
-                    <div className="mt-6 flex justify-center gap-2">
-                        <Button variant="outline" size="sm" onClick={() => fetchReports(pagination.page - 1)} disabled={pagination.page === 1} className="rounded border-[#27272a] bg-transparent text-white text-sm h-8 px-3">Previous</Button>
-                        <Button variant="outline" size="sm" onClick={() => fetchReports(pagination.page + 1)} disabled={pagination.page === pagination.totalPages} className="rounded border-[#27272a] bg-transparent text-white text-sm h-8 px-3">Next</Button>
+                {/* Pagination + Per Page */}
+                <div className="mt-6 flex items-center justify-between">
+                    {/* Per Page Dropdown */}
+                    <div className="relative">
+                        <button
+                            onClick={() => setShowPerPageDropdown(!showPerPageDropdown)}
+                            className="flex items-center gap-2 px-3 py-1.5 rounded bg-[#27272a] text-white text-sm hover:bg-[#3f3f46] transition-colors"
+                        >
+                            <span>{perPage} per page</span>
+                            <ChevronDown className="w-4 h-4" />
+                        </button>
+                        {showPerPageDropdown && (
+                            <>
+                                <div className="fixed inset-0 z-10" onClick={() => setShowPerPageDropdown(false)} />
+                                <div className="absolute left-0 bottom-full mb-1 bg-[#27272a] border border-[#3f3f46] rounded-lg py-1 min-w-[100px] z-20 shadow-xl">
+                                    {[10, 20, 50, 100].map((n) => (
+                                        <button
+                                            key={n}
+                                            onClick={() => { setPerPage(n); setShowPerPageDropdown(false); }}
+                                            className={cn(
+                                                "w-full px-3 py-1.5 text-left text-sm hover:bg-white/10 transition-colors",
+                                                perPage === n ? "text-indigo-400" : "text-white"
+                                            )}
+                                        >
+                                            {n} per page
+                                        </button>
+                                    ))}
+                                </div>
+                            </>
+                        )}
                     </div>
-                )}
+
+                    {/* Pagination */}
+                    {pagination.totalPages > 1 && (
+                        <div className="flex gap-2">
+                            <Button variant="outline" size="sm" onClick={() => fetchReports(pagination.page - 1, perPage)} disabled={pagination.page === 1} className="rounded border-[#27272a] bg-transparent text-white text-sm h-8 px-3">Previous</Button>
+                            <span className="flex items-center text-sm text-muted-foreground px-2">
+                                Page {pagination.page} of {pagination.totalPages}
+                            </span>
+                            <Button variant="outline" size="sm" onClick={() => fetchReports(pagination.page + 1, perPage)} disabled={pagination.page === pagination.totalPages} className="rounded border-[#27272a] bg-transparent text-white text-sm h-8 px-3">Next</Button>
+                        </div>
+                    )}
+                </div>
             </div>
         </div>
     );

@@ -72,6 +72,7 @@ CREATE TABLE reports_data (
     dom TEXT,
     screenshot TEXT, -- File path for local/s3/gcs, or base64 data for legacy
     screenshot_storage VARCHAR(20) DEFAULT NULL, -- 'local', 's3', 'gcs', 'db' (legacy)
+    screenshot_error TEXT, -- Error message if screenshot capture failed
     localstorage TEXT,
     sessionstorage TEXT,
     extra JSONB,
@@ -96,7 +97,8 @@ INSERT INTO settings (key, value) VALUES
 ('app_tagline', 'Lightweight Blind XSS Listener'),
 ('timezone', 'UTC'),
 ('persistent_enabled', 'false'),
-('persistent_key', '');
+('persistent_key', ''),
+('advanced_persistent_enabled', 'false');
 
 -- ============================================
 -- AUDIT LOGS TABLE
@@ -123,12 +125,33 @@ CREATE TABLE persistent_sessions (
     pending_command TEXT,
     last_response TEXT,
     last_response_at TIMESTAMP WITH TIME ZONE,
+    session_status VARCHAR(50) DEFAULT 'active', -- 'active', 'popup_blocked', 'popup_opened', 'terminated', 'popup_error'
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX idx_persistent_sessions_report_id ON persistent_sessions(report_id);
 CREATE INDEX idx_persistent_sessions_last_seen ON persistent_sessions(last_seen);
 CREATE INDEX idx_persistent_sessions_last_response_at ON persistent_sessions(last_response_at);
+
+-- ============================================
+-- INTERCEPTED TRAFFIC TABLE (Traffic Interception)
+-- ============================================
+CREATE TABLE intercepted_traffic (
+    id VARCHAR(26) PRIMARY KEY, -- ULID
+    report_id VARCHAR(26) NOT NULL REFERENCES reports(id) ON DELETE CASCADE,
+    traffic_type VARCHAR(20) NOT NULL, -- 'fetch', 'xhr', 'form', 'navigation'
+    method VARCHAR(10),
+    url TEXT,
+    request_headers TEXT,
+    request_body TEXT,
+    response_headers TEXT,
+    response_body TEXT,
+    status_code INTEGER,
+    captured_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_intercepted_traffic_report_id ON intercepted_traffic(report_id);
+CREATE INDEX idx_intercepted_traffic_captured_at ON intercepted_traffic(captured_at);
 
 -- ============================================
 -- HELPER FUNCTIONS

