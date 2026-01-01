@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 import {
     Eye,
@@ -175,15 +175,17 @@ export default function ReportsPage() {
         }
     };
 
-    const filteredReports = reports.filter((report) => {
-        if (!searchTerm) return true;
-        const term = searchTerm.toLowerCase();
-        return (
-            report.origin?.toLowerCase().includes(term) ||
-            report.uri?.toLowerCase().includes(term) ||
-            report.ip?.toLowerCase().includes(term)
-        );
-    });
+    const filteredReports = useMemo(() => {
+        return reports.filter((report) => {
+            if (!searchTerm) return true;
+            const term = searchTerm.toLowerCase();
+            return (
+                report.origin?.toLowerCase().includes(term) ||
+                report.uri?.toLowerCase().includes(term) ||
+                report.ip?.toLowerCase().includes(term)
+            );
+        });
+    }, [reports, searchTerm]);
 
     const allSelected = filteredReports.length > 0 && selectedIds.size === filteredReports.length;
     const someSelected = selectedIds.size > 0 && selectedIds.size < filteredReports.length;

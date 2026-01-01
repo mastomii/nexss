@@ -10,6 +10,7 @@
 
 import { query, queryOne, Setting } from '@/lib/db';
 import { testConnection, ObjectStorageConfig } from '@/lib/object-storage';
+import { settingsCache, CacheKeys } from '@/lib/cache';
 import {
     ServiceResult,
     success,
@@ -59,37 +60,53 @@ const MASK_VALUE = '••••••••';
 // ============================================
 
 /**
- * Get all settings (with secrets masked)
+ * Get all settings (with secrets masked) - CACHED
  */
 export async function getAllSettings(): Promise<ServiceResult<Record<string, string>>> {
     return safeExecute('SettingsService', 'getAllSettings', async () => {
-        const settings = await query<Setting>('SELECT key, value FROM settings');
+        // Try cache first
+        const cached = await settingsCache.getOrSet<Record<string, string>>(
+            CacheKeys.allSettings(),
+            async () => {
+                const settings = await query<Setting>('SELECT key, value FROM settings');
 
-        const settingsObj: Record<string, string> = {};
-        for (const s of settings) {
-            // Mask secret keys
-            if (MASKED_KEYS.includes(s.key) && s.value) {
-                settingsObj[s.key] = MASK_VALUE;
-            } else {
-                settingsObj[s.key] = s.value;
+                const settingsObj: Record<string, string> = {};
+                for (const s of settings) {
+                    // Mask secret keys
+                    if (MASKED_KEYS.includes(s.key) && s.value) {
+                        settingsObj[s.key] = MASK_VALUE;
+                    } else {
+                        settingsObj[s.key] = s.value;
+                    }
+                }
+                return settingsObj;
             }
-        }
+        );
 
-        return success(settingsObj);
+        return success(cached);
     });
 }
 
 /**
- * Get a single setting value
+ * Get a single setting value - CACHED
  */
 export async function getSetting(key: string): Promise<ServiceResult<string | null>> {
     return safeExecute('SettingsService', 'getSetting', async () => {
-        const setting = await queryOne<Setting>(
-            'SELECT value FROM settings WHERE key = $1',
-            [key]
+        // Use individual cache key for each setting
+        const cacheKey = CacheKeys.setting(key);
+        
+        const cached = await settingsCache.getOrSet<string | null>(
+            cacheKey,
+            async () => {
+                const setting = await queryOne<Setting>(
+                    'SELECT value FROM settings WHERE key = $1',
+                    [key]
+                );
+                return setting?.value || null;
+            }
         );
 
-        return success(setting?.value || null);
+        return success(cached);
     });
 }
 
@@ -131,6 +148,10 @@ export async function updateSetting(
             [key, value]
         );
 
+        // Invalidate cache
+        settingsCache.delete(CacheKeys.allSettings());
+        settingsCache.delete(CacheKeys.setting(key));
+
         logger.info('Setting updated', { key });
         return success({ updated: true });
     });
@@ -155,7 +176,13 @@ export async function updateSettings(
                  ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()`,
                 [key, String(value)]
             );
+            
+            // Invalidate individual setting cache
+            settingsCache.delete(CacheKeys.setting(key));
         }
+
+        // Invalidate all settings cache
+        settingsCache.delete(CacheKeys.allSettings());
 
         logger.info('Settings bulk updated', { count: Object.keys(settings).length });
         return success({ updated: true });

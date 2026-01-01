@@ -235,8 +235,8 @@ export const dashboardCache = new LRUCache({
   cleanupInterval: 60 * 1000,
 });
 
-// Settings cache (longer TTL, rarely changes)
-export const settingsCache = new LRUCache<string>({
+// Settings cache (longer TTL, rarely changes) - uses unknown type for flexibility
+export const settingsCache = new LRUCache({
   maxSize: 100,
   defaultTTL: 5 * 60 * 1000, // 5 minutes
   cleanupInterval: 60 * 1000,

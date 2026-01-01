@@ -11,6 +11,7 @@
 import { query, queryOne, Report, ReportData } from '@/lib/db';
 import { decompressString } from '@/lib/utils';
 import { getObjectStorageConfig, deleteFromStorage, extractKeyFromUrl } from '@/lib/object-storage';
+import { CacheInvalidation } from '@/lib/cache';
 import { unlink } from 'fs/promises';
 import { join } from 'path';
 import { existsSync } from 'fs';
@@ -297,6 +298,9 @@ export async function deleteReport(id: string): Promise<ServiceResult<{ deleted:
         // Delete report (cascade handles reports_data, persistent_sessions, intercepted_traffic)
         await query('DELETE FROM reports WHERE id = $1', [id]);
 
+        // Invalidate caches
+        CacheInvalidation.report(id);
+
         logger.info('Report deleted', { id });
         return success({ deleted: true });
     });
@@ -318,6 +322,9 @@ export async function bulkArchive(
             'UPDATE reports SET archived = $1 WHERE id = ANY($2)',
             [archived, ids]
         );
+
+        // Invalidate dashboard cache
+        CacheInvalidation.reports();
 
         logger.info(`Bulk ${archived ? 'archive' : 'unarchive'}`, { count: ids.length });
         return success({ success: true, count: ids.length });
@@ -346,6 +353,9 @@ export async function bulkDelete(ids: string[]): Promise<ServiceResult<BulkActio
         await query('DELETE FROM reports_data WHERE report_id = ANY($1)', [ids]);
         await query('DELETE FROM reports WHERE id = ANY($1)', [ids]);
 
+        // Invalidate caches
+        CacheInvalidation.reports();
+
         logger.info('Bulk delete completed', { count: ids.length });
         return success({ success: true, count: ids.length });
     });
@@ -363,6 +373,9 @@ export async function bulkMarkRead(
             'UPDATE reports SET read = $1 WHERE id = ANY($2)',
             [read, ids]
         );
+
+        // Invalidate dashboard cache (unread count changes)
+        CacheInvalidation.dashboard();
 
         return success({ success: true, count: ids.length });
     });

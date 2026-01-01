@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo } from 'react';
 import Link from 'next/link';
 import {
     Activity,
@@ -54,7 +55,7 @@ export default function DashboardPage() {
         }
     );
 
-    const stats = [
+    const stats = useMemo(() => [
         {
             label: "Total Reports",
             value: data?.stats?.totalReports ?? 0,
@@ -83,10 +84,10 @@ export default function DashboardPage() {
             icon: Users,
             iconBoxColor: "bg-[#251e36] text-[#a78bfa]"
         }
-    ];
+    ], [data?.stats]);
 
-    // Get last 7 days of data from API
-    const getChartData = () => {
+    // Get last 7 days of data from API - memoized
+    const chartData = useMemo(() => {
         const reportsPerDay = data?.charts?.reportsPerDay || [];
         const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
         
@@ -139,9 +140,7 @@ export default function DashboardPage() {
         if (maxCount === 0) maxCount = 1;
         
         return { points, maxCount };
-    };
-
-    const chartData = getChartData();
+    }, [data?.charts?.reportsPerDay]);
 
     return (
         <div className="space-y-5 pb-8">
