@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { TotpInput } from '@/components/ui/totp-input';
+import { apiPut, apiPost } from '@/lib/api-client';
 import { toast } from 'sonner';
 
 interface UserProfile {
@@ -123,11 +124,7 @@ export default function ProfilePage() {
                 return;
             }
 
-            const res = await fetch('/api/user', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
-            });
+            const res = await apiPut('/api/user', payload);
 
             const data = await res.json();
 
@@ -180,11 +177,7 @@ export default function ProfilePage() {
         setTwoFALoading(true);
         setTwoFAError('');
         try {
-            const res = await fetch('/api/auth/2fa/setup', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ token: codeToVerify }),
-            });
+            const res = await apiPost('/api/auth/2fa/setup', { token: codeToVerify });
 
             const data = await res.json();
             if (res.ok) {
@@ -213,11 +206,7 @@ export default function ProfilePage() {
         setTwoFALoading(true);
         setTwoFAError('');
         try {
-            const res = await fetch('/api/auth/2fa/disable', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ password: disablePassword }),
-            });
+            const res = await apiPost('/api/auth/2fa/disable', { password: disablePassword });
 
             const data = await res.json();
             if (res.ok) {
@@ -244,11 +233,7 @@ export default function ProfilePage() {
         setTwoFALoading(true);
         setTwoFAError('');
         try {
-            const res = await fetch('/api/auth/2fa/backup', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ password: regeneratePassword, token: regenerateCode }),
-            });
+            const res = await apiPost('/api/auth/2fa/backup', { password: regeneratePassword, token: regenerateCode });
 
             const data = await res.json();
             if (res.ok) {

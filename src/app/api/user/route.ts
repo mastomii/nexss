@@ -1,6 +1,7 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { query, queryOne, User } from '@/lib/db';
 import { getSession } from '@/lib/auth';
+import { validateCSRF } from '@/lib/csrf';
 import bcrypt from 'bcrypt';
 
 // GET - Get current user profile
@@ -28,7 +29,7 @@ export async function GET() {
 }
 
 // PUT - Update user profile (email/password)
-export async function PUT(request: Request) {
+export async function PUT(request: NextRequest) {
     try {
         const session = await getSession();
         if (!session) {
@@ -36,6 +37,11 @@ export async function PUT(request: Request) {
         }
 
         const body = await request.json();
+        
+        // CSRF validation for sensitive profile changes
+        const csrfError = validateCSRF(request, body);
+        if (csrfError) return csrfError;
+        
         const { email, currentPassword, newPassword } = body;
 
         // Get current user

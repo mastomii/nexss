@@ -3,12 +3,18 @@ import { ulid } from 'ulid';
 
 const globalForPg = global as unknown as { pool: Pool | undefined };
 
-export const pool = globalForPg.pool ?? new Pool({
+// Pool configuration from environment variables
+const poolConfig = {
   connectionString: process.env.DATABASE_URL,
-  max: 20,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
-});
+  // Pool size: default 20, configurable via DB_POOL_MAX
+  max: parseInt(process.env.DB_POOL_MAX || '20', 10),
+  // How long a client is allowed to remain idle before being closed: default 30s
+  idleTimeoutMillis: parseInt(process.env.DB_POOL_IDLE_TIMEOUT || '30000', 10),
+  // Maximum time to wait for connection: default 2s
+  connectionTimeoutMillis: parseInt(process.env.DB_POOL_CONNECTION_TIMEOUT || '2000', 10),
+};
+
+export const pool = globalForPg.pool ?? new Pool(poolConfig);
 
 if (process.env.NODE_ENV !== 'production') {
   globalForPg.pool = pool;

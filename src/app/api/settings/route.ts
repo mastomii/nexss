@@ -1,7 +1,9 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { query, Setting } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { getObjectStorageConfig, testConnection, ObjectStorageConfig } from '@/lib/object-storage';
+import { settingsUpdateSchema, safeValidate } from '@/lib/validations';
+import { validateCSRF } from '@/lib/csrf';
 
 // GET - Get all settings
 export async function GET() {
@@ -34,7 +36,7 @@ export async function GET() {
 }
 
 // PUT - Update settings (upsert)
-export async function PUT(request: Request) {
+export async function PUT(request: NextRequest) {
     try {
         const session = await getSession();
         if (!session) {
@@ -47,10 +49,24 @@ export async function PUT(request: Request) {
         }
 
         const body = await request.json();
+        
+        // CSRF validation for state-changing request
+        const csrfError = validateCSRF(request, body);
+        if (csrfError) return csrfError;
+        
         const { settings } = body;
 
         if (!settings || typeof settings !== 'object') {
             return NextResponse.json({ error: 'Invalid settings' }, { status: 400 });
+        }
+
+        // Validate settings with Zod
+        const validation = safeValidate(settingsUpdateSchema, settings);
+        if (!validation.success) {
+            return NextResponse.json(
+                { error: 'Invalid settings', details: validation.error },
+                { status: 400 }
+            );
         }
 
         // Upsert each setting using ON CONFLICT

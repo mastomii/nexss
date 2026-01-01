@@ -1,11 +1,17 @@
 'use client';
 
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, lazy, Suspense } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { toast } from 'sonner';
+import { apiPut } from '@/lib/api-client';
+
+// Lazy load SyntaxHighlighter - it's a heavy component
+const SyntaxHighlighter = lazy(() => 
+    import('react-syntax-highlighter').then(mod => ({ default: mod.Prism }))
+);
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+
 import {
     ArrowLeft,
     Loader2,
@@ -209,18 +215,22 @@ export default function ReportDetailPage() {
         fetchReport();
         checkSessionStatus();
         fetchTrafficData();
+    }, [params.id, router, checkSessionStatus, fetchTrafficData]);
 
-        // Poll session status and traffic every 5 seconds, but stop if terminated
+    // Separate effect for polling - properly handles cleanup and termination
+    useEffect(() => {
+        // Don't start polling if session is already terminated
+        if (sessionStatus?.terminated) {
+            return;
+        }
+
         const interval = setInterval(() => {
-            // Don't poll if session is terminated
-            if (sessionStatus?.terminated) {
-                return;
-            }
             checkSessionStatus();
             fetchTrafficData();
         }, 5000);
+
         return () => clearInterval(interval);
-    }, [params.id, router, checkSessionStatus, fetchTrafficData, sessionStatus?.terminated]);
+    }, [checkSessionStatus, fetchTrafficData, sessionStatus?.terminated]);
 
     const copyToClipboard = async (text: string, key: string) => {
         await navigator.clipboard.writeText(text);
@@ -297,11 +307,7 @@ export default function ReportDetailPage() {
         setCmdResult(null);
 
         try {
-            const res = await fetch('/api/persist', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ report_id: params.id, command }),
-            });
+            const res = await apiPut('/api/persist', { report_id: params.id, command });
 
             const data = await res.json();
 
@@ -659,28 +665,35 @@ export default function ReportDetailPage() {
                                     </div>
                                 </div>
                                 <div className="rounded overflow-hidden border border-[#27272a]">
-                                    <SyntaxHighlighter
-                                        language="html"
-                                        style={vscDarkPlus}
-                                        showLineNumbers
-                                        wrapLongLines
-                                        customStyle={{
-                                            margin: 0,
-                                            padding: '12px',
-                                            fontSize: '13px',
-                                            maxHeight: '400px',
-                                            background: '#09090b',
-                                        }}
-                                        lineNumberStyle={{
-                                            minWidth: '40px',
-                                            paddingRight: '16px',
-                                            color: '#525252',
-                                            borderRight: '1px solid #27272a',
-                                            marginRight: '12px',
-                                        }}
-                                    >
-                                        {processedDom}
-                                    </SyntaxHighlighter>
+                                    <Suspense fallback={
+                                        <div className="p-4 bg-[#09090b] text-muted-foreground text-sm flex items-center justify-center">
+                                            <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                                            Loading syntax highlighter...
+                                        </div>
+                                    }>
+                                        <SyntaxHighlighter
+                                            language="html"
+                                            style={vscDarkPlus}
+                                            showLineNumbers
+                                            wrapLongLines
+                                            customStyle={{
+                                                margin: 0,
+                                                padding: '12px',
+                                                fontSize: '13px',
+                                                maxHeight: '400px',
+                                                background: '#09090b',
+                                            }}
+                                            lineNumberStyle={{
+                                                minWidth: '40px',
+                                                paddingRight: '16px',
+                                                color: '#525252',
+                                                borderRight: '1px solid #27272a',
+                                                marginRight: '12px',
+                                            }}
+                                        >
+                                            {processedDom}
+                                        </SyntaxHighlighter>
+                                    </Suspense>
                                     {isDomTruncated && (
                                         <div className="mt-2 p-2 rounded bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs text-center">
                                             Showing first 100 KB of {domSizeInfo}. Click &quot;Load Full DOM&quot; to view complete content.

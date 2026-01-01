@@ -3,6 +3,7 @@ import { query, queryOne, generateId, Setting } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { corsHeaders } from '@/lib/cors';
 import { checkRateLimit, getClientIPFromRequest, rateLimitExceededResponse } from '@/lib/rate-limit';
+import { trafficDataSchema, safeValidate } from '@/lib/validations';
 import crypto from 'crypto';
 
 interface InterceptedTraffic {
@@ -67,7 +68,17 @@ export async function POST(request: Request) {
         }
 
         const body = await request.json();
-        let { rid, type, method, url, reqHeaders, reqBody, resHeaders, resBody, status, encrypted, data } = body;
+        
+        // Validate input with Zod
+        const validation = safeValidate(trafficDataSchema, body);
+        if (!validation.success) {
+            return NextResponse.json(
+                { error: 'Invalid input', details: validation.error },
+                { status: 400, headers: corsHeaders }
+            );
+        }
+        
+        let { rid, type, method, url, reqHeaders, reqBody, resHeaders, resBody, status, encrypted, data } = validation.data;
 
         // Handle encrypted payload
         if (encrypted && data) {

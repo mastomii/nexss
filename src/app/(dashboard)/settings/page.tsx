@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { TimezoneSelect } from '@/components/ui/timezone-select';
 import { useSettings } from '@/lib/settings-context';
+import { apiPut, apiPost } from '@/lib/api-client';
 import { toast } from 'sonner';
 
 interface AppSettings {
@@ -138,15 +139,11 @@ export default function SettingsPage() {
         e.preventDefault();
         setSaving(true);
         try {
-            const res = await fetch('/api/settings', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    settings: {
-                        app_name: settings.app_name,
-                        timezone: settings.timezone,
-                    }
-                }),
+            const res = await apiPut('/api/settings', { 
+                settings: {
+                    app_name: settings.app_name,
+                    timezone: settings.timezone,
+                }
             });
 
             if (res.ok) {
@@ -169,11 +166,7 @@ export default function SettingsPage() {
         e.preventDefault();
         setSavingStorage(true);
         try {
-            const res = await fetch('/api/settings', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ settings: storageSettings }),
-            });
+            const res = await apiPut('/api/settings', { settings: storageSettings });
 
             if (res.ok) {
                 setSavedStorage(true);
@@ -194,21 +187,17 @@ export default function SettingsPage() {
         setTestingConnection(true);
         setConnectionResult(null);
         try {
-            const res = await fetch('/api/settings', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    action: 'test_connection',
-                    config: {
-                        provider: storageSettings.storage_provider,
-                        endpoint: storageSettings.storage_endpoint,
-                        region: storageSettings.storage_region,
-                        bucket: storageSettings.storage_bucket,
-                        accessKeyId: storageSettings.storage_access_key,
-                        secretAccessKey: storageSettings.storage_secret_key,
-                        publicUrl: storageSettings.storage_public_url,
-                    },
-                }),
+            const res = await apiPost('/api/settings', {
+                action: 'test_connection',
+                config: {
+                    provider: storageSettings.storage_provider,
+                    endpoint: storageSettings.storage_endpoint,
+                    region: storageSettings.storage_region,
+                    bucket: storageSettings.storage_bucket,
+                    accessKeyId: storageSettings.storage_access_key,
+                    secretAccessKey: storageSettings.storage_secret_key,
+                    publicUrl: storageSettings.storage_public_url,
+                },
             });
             const data = await res.json();
             setConnectionResult(data);
@@ -230,23 +219,19 @@ export default function SettingsPage() {
         setMigrating(true);
         setMigrationResult(null);
         try {
-            const res = await fetch('/api/storage/migrate', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    action: 'migrate', 
-                    deleteAfterMigration: true,
-                    // Send current form config for migration before enabling
-                    config: {
-                        provider: storageSettings.storage_provider,
-                        endpoint: storageSettings.storage_endpoint,
-                        region: storageSettings.storage_region,
-                        bucket: storageSettings.storage_bucket,
-                        accessKeyId: storageSettings.storage_access_key,
-                        secretAccessKey: storageSettings.storage_secret_key,
-                        publicUrl: storageSettings.storage_public_url,
-                    },
-                }),
+            const res = await apiPost('/api/storage/migrate', { 
+                action: 'migrate', 
+                deleteAfterMigration: true,
+                // Send current form config for migration before enabling
+                config: {
+                    provider: storageSettings.storage_provider,
+                    endpoint: storageSettings.storage_endpoint,
+                    region: storageSettings.storage_region,
+                    bucket: storageSettings.storage_bucket,
+                    accessKeyId: storageSettings.storage_access_key,
+                    secretAccessKey: storageSettings.storage_secret_key,
+                    publicUrl: storageSettings.storage_public_url,
+                },
             });
             const data = await res.json();
             if (data.success) {
@@ -356,11 +341,7 @@ export default function SettingsPage() {
         e.preventDefault();
         setSavingTelegram(true);
         try {
-            const res = await fetch('/api/settings', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ settings: telegramSettings }),
-            });
+            const res = await apiPut('/api/settings', { settings: telegramSettings });
             if (res.ok) {
                 setSavedTelegram(true);
                 setTimeout(() => setSavedTelegram(false), 2000);

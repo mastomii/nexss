@@ -22,6 +22,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { apiPut } from '@/lib/api-client';
 import { toast } from 'sonner';
 
 type TabType = 'settings' | 'payloads' | 'notes';
@@ -77,11 +78,7 @@ export default function PayloadsPage() {
     const handleSave = async () => {
         setSaving(true);
         try {
-            const res = await fetch('/api/settings', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ settings }),
-            });
+            const res = await apiPut('/api/settings', { settings });
             if (res.ok) {
                 setSaved(true);
                 setTimeout(() => setSaved(false), 2000);

@@ -4,7 +4,8 @@ import { getClientIP, compressString } from '@/lib/utils';
 import { getObjectStorageConfig, uploadToStorage } from '@/lib/object-storage';
 import { sendXSSNotification } from '@/lib/telegram';
 import { corsHeaders } from '@/lib/cors';
-import { checkRateLimit, getClientIPFromRequest, createRateLimitHeaders, rateLimitExceededResponse } from '@/lib/rate-limit';
+import { checkRateLimit, getClientIPFromRequest, rateLimitExceededResponse } from '@/lib/rate-limit';
+import { callbackDataSchema, safeValidate } from '@/lib/validations';
 import { writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
 import { existsSync } from 'fs';
@@ -75,6 +76,15 @@ export async function POST(request: NextRequest) {
 
         if (!data || typeof data !== 'object') {
             return jsonResponse({ error: 'Invalid data' }, 400);
+        }
+
+        // Validate with Zod schema (lenient for XSS data)
+        const validation = safeValidate(callbackDataSchema, data);
+        if (!validation.success) {
+            console.warn('[NeXSS] Callback validation warning:', validation.error);
+            // Don't reject - XSS data can be malformed, just log it
+        } else {
+            data = validation.data as CallbackData;
         }
 
         // Get client IP from data or request headers

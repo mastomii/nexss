@@ -1,18 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { login, logAction } from '@/lib/auth';
 import { getClientIP } from '@/lib/utils';
+import { loginSchema, safeValidate } from '@/lib/validations';
+import { addCSRFToLoginResponse } from '@/lib/csrf';
 
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
-        const { username, password } = body;
-
-        if (!username || !password) {
+        
+        // Validate input with Zod
+        const validation = safeValidate(loginSchema, body);
+        if (!validation.success) {
             return NextResponse.json(
-                { error: 'Username and password required' },
+                { error: validation.error },
                 { status: 400 }
             );
         }
+        
+        const { username, password } = validation.data;
 
         const ip = getClientIP(request);
         const userAgent = request.headers.get('user-agent') || '';
@@ -58,6 +63,9 @@ export async function POST(request: NextRequest) {
             maxAge: 7 * 24 * 60 * 60, // 7 days
             path: '/',
         });
+
+        // Set CSRF token cookie
+        addCSRFToLoginResponse(response);
 
         return response;
     } catch (error) {

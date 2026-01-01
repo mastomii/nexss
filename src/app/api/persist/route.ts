@@ -3,6 +3,7 @@ import { query, queryOne, generateId } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { corsHeaders } from '@/lib/cors';
 import { checkRateLimit, getClientIPFromRequest, rateLimitExceededResponse } from '@/lib/rate-limit';
+import { persistRequestSchema, persistCommandSchema, safeValidate } from '@/lib/validations';
 import crypto from 'crypto';
 
 interface PersistSession {
@@ -81,14 +82,17 @@ export async function POST(request: Request) {
         }
 
         const body = await request.json();
-        const { rid, response, encrypted, nocrypto, status } = body;
-
-        if (!rid) {
+        
+        // Validate input with Zod
+        const validation = safeValidate(persistRequestSchema, body);
+        if (!validation.success) {
             return NextResponse.json(
-                { error: 'Missing report id' },
+                { error: 'Invalid input', details: validation.error },
                 { status: 400, headers: corsHeaders }
             );
         }
+        
+        const { rid, response, encrypted, nocrypto, status } = validation.data;
 
         const encryptionKey = await getEncryptionKey();
 

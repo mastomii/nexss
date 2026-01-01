@@ -25,6 +25,7 @@ export interface HealthCheckResult {
         missingTables?: string[];
         missingColumns?: { table: string; columns: string[] }[];
         typeMismatch?: { table: string; column: string; expected: string; actual: string }[];
+        missingIndexes?: string[];
         connectionError?: string;
     };
 }
@@ -137,6 +138,11 @@ const EXPECTED_SCHEMA: TableSchema[] = [
             { name: 'status_code', type: 'integer' },
             { name: 'captured_at', type: 'timestamp with time zone' },
         ],
+        indexes: [
+            'idx_intercepted_traffic_report_id',
+            'idx_intercepted_traffic_captured_at',
+            'idx_intercepted_traffic_report_captured', // Composite index for pagination
+        ],
     },
 ];
 
@@ -230,6 +236,31 @@ export async function getTableColumns(tableName: string): Promise<{ name: string
 }
 
 /**
+ * Get existing indexes in the database
+ */
+export async function getExistingIndexes(): Promise<string[]> {
+    const pool = new Pool({
+        connectionString: process.env.DATABASE_URL,
+        connectionTimeoutMillis: 5000,
+    });
+
+    try {
+        const client = await pool.connect();
+        const result = await client.query(`
+            SELECT indexname 
+            FROM pg_indexes 
+            WHERE schemaname = 'public'
+        `);
+        client.release();
+        await pool.end();
+        return result.rows.map((row: { indexname: string }) => row.indexname);
+    } catch (error) {
+        await pool.end();
+        throw error;
+    }
+}
+
+/**
  * Comprehensive health check
  */
 export async function checkDatabaseHealth(): Promise<HealthCheckResult> {
@@ -299,7 +330,17 @@ export async function checkDatabaseHealth(): Promise<HealthCheckResult> {
             }
         }
 
-        if (missingTables.length > 0 || missingColumns.length > 0 || typeMismatch.length > 0) {
+        // Check 5: Check indexes
+        const existingIndexes = await getExistingIndexes();
+        const expectedIndexes: string[] = [];
+        for (const tableSchema of EXPECTED_SCHEMA) {
+            if (tableSchema.indexes) {
+                expectedIndexes.push(...tableSchema.indexes);
+            }
+        }
+        const missingIndexes = expectedIndexes.filter(idx => !existingIndexes.includes(idx));
+
+        if (missingTables.length > 0 || missingColumns.length > 0 || typeMismatch.length > 0 || missingIndexes.length > 0) {
             return {
                 status: 'schema_mismatch',
                 message: 'Database schema is incomplete or has type mismatches. Click "Sync Database" to fix.',
@@ -307,6 +348,7 @@ export async function checkDatabaseHealth(): Promise<HealthCheckResult> {
                     missingTables: missingTables.length > 0 ? missingTables : undefined,
                     missingColumns: missingColumns.length > 0 ? missingColumns : undefined,
                     typeMismatch: typeMismatch.length > 0 ? typeMismatch : undefined,
+                    missingIndexes: missingIndexes.length > 0 ? missingIndexes : undefined,
                 },
             };
         }

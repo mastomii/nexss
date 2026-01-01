@@ -150,8 +150,11 @@ CREATE TABLE intercepted_traffic (
     captured_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Individual indexes for general queries
 CREATE INDEX idx_intercepted_traffic_report_id ON intercepted_traffic(report_id);
 CREATE INDEX idx_intercepted_traffic_captured_at ON intercepted_traffic(captured_at);
+-- Composite index for efficient pagination queries: WHERE report_id = ? ORDER BY captured_at
+CREATE INDEX idx_intercepted_traffic_report_captured ON intercepted_traffic(report_id, captured_at DESC);
 
 -- ============================================
 -- HELPER FUNCTIONS
