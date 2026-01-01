@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { toast } from 'sonner';
 import {
     ArrowLeft,
     Loader2,
@@ -225,6 +226,7 @@ export default function ReportDetailPage() {
         await navigator.clipboard.writeText(text);
         setCopied(key);
         setTimeout(() => setCopied(null), 2000);
+        toast.success('Copied to clipboard');
     };
 
     const formatJson = (str: string | null) => {

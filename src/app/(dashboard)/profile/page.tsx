@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { TotpInput } from '@/components/ui/totp-input';
+import { toast } from 'sonner';
 
 interface UserProfile {
     id: string;
@@ -33,7 +34,6 @@ export default function ProfilePage() {
     const [showNewPassword, setShowNewPassword] = useState(false);
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
-    const [error, setError] = useState('');
 
     // 2FA state
     const [twoFAStep, setTwoFAStep] = useState<TwoFAStep>('idle');
@@ -87,17 +87,16 @@ export default function ProfilePage() {
 
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
-        setError('');
 
         // Validate password confirmation
         if (newPassword && newPassword !== confirmPassword) {
-            setError('New passwords do not match');
+            toast.error('New passwords do not match');
             return;
         }
 
         // Validate password requirements
         if (newPassword && newPassword.length < 6) {
-            setError('New password must be at least 6 characters');
+            toast.error('New password must be at least 6 characters');
             return;
         }
 
@@ -120,6 +119,7 @@ export default function ProfilePage() {
             if (Object.keys(payload).length === 0) {
                 setSaved(true);
                 setTimeout(() => setSaved(false), 2000);
+                toast.success('Profile saved');
                 return;
             }
 
@@ -134,6 +134,7 @@ export default function ProfilePage() {
             if (res.ok) {
                 setSaved(true);
                 setTimeout(() => setSaved(false), 2000);
+                toast.success('Profile updated successfully');
                 // Clear password fields
                 setCurrentPassword('');
                 setNewPassword('');
@@ -141,10 +142,10 @@ export default function ProfilePage() {
                 // Refresh profile
                 fetchProfile();
             } else {
-                setError(data.error || 'Failed to update profile');
+                toast.error(data.error || 'Failed to update profile');
             }
         } catch {
-            setError('Something went wrong');
+            toast.error('Something went wrong');
         } finally {
             setSaving(false);
         }
@@ -163,10 +164,10 @@ export default function ProfilePage() {
                 setTwoFAStep('setup');
             } else {
                 const data = await res.json();
-                setTwoFAError(data.error || 'Failed to initiate 2FA setup');
+                toast.error(data.error || 'Failed to initiate 2FA setup');
             }
         } catch {
-            setTwoFAError('Something went wrong');
+            toast.error('Something went wrong');
         } finally {
             setTwoFALoading(false);
         }
@@ -190,12 +191,14 @@ export default function ProfilePage() {
                 setBackupCodes(data.backupCodes);
                 setTwoFAStep('backup');
                 fetchProfile();
+                toast.success('2FA enabled successfully!');
             } else {
                 setTwoFAError(data.error || 'Invalid verification code');
+                toast.error(data.error || 'Invalid verification code');
                 setTotpCode('');
             }
         } catch {
-            setTwoFAError('Something went wrong');
+            toast.error('Something went wrong');
         } finally {
             setTwoFALoading(false);
         }
@@ -203,7 +206,7 @@ export default function ProfilePage() {
 
     const disable2FA = async () => {
         if (!disablePassword) {
-            setTwoFAError('Password is required');
+            toast.error('Password is required');
             return;
         }
 
@@ -221,11 +224,12 @@ export default function ProfilePage() {
                 setTwoFAStep('idle');
                 setDisablePassword('');
                 fetchProfile();
+                toast.success('2FA disabled successfully');
             } else {
-                setTwoFAError(data.error || 'Failed to disable 2FA');
+                toast.error(data.error || 'Failed to disable 2FA');
             }
         } catch {
-            setTwoFAError('Something went wrong');
+            toast.error('Something went wrong');
         } finally {
             setTwoFALoading(false);
         }
@@ -233,7 +237,7 @@ export default function ProfilePage() {
 
     const regenerateBackupCodes = async () => {
         if (!regeneratePassword || regenerateCode.length !== 6) {
-            setTwoFAError('Password and 2FA code are required');
+            toast.error('Password and 2FA code are required');
             return;
         }
 
@@ -253,11 +257,13 @@ export default function ProfilePage() {
                 setRegeneratePassword('');
                 setRegenerateCode('');
                 fetchBackupCodeCount();
+                toast.success('Backup codes regenerated');
             } else {
                 setTwoFAError(data.error || 'Failed to regenerate backup codes');
+                toast.error(data.error || 'Failed to regenerate backup codes');
             }
         } catch {
-            setTwoFAError('Something went wrong');
+            toast.error('Something went wrong');
         } finally {
             setTwoFALoading(false);
         }
@@ -267,6 +273,7 @@ export default function ProfilePage() {
         navigator.clipboard.writeText(twoFASecret);
         setCopiedSecret(true);
         setTimeout(() => setCopiedSecret(false), 2000);
+        toast.success('Secret copied to clipboard');
     };
 
     const downloadBackupCodes = () => {
@@ -278,10 +285,12 @@ export default function ProfilePage() {
         a.download = 'nexss-backup-codes.txt';
         a.click();
         URL.revokeObjectURL(url);
+        toast.success('Backup codes downloaded');
     };
 
     const copyBackupCodes = () => {
         navigator.clipboard.writeText(backupCodes.join('\n'));
+        toast.success('Backup codes copied to clipboard');
     };
 
     const reset2FAState = () => {
@@ -426,12 +435,6 @@ export default function ProfilePage() {
                                 <p className="text-xs text-red-400">Passwords do not match</p>
                             )}
                         </div>
-
-                        {error && (
-                            <div className="text-sm text-red-400 bg-red-400/10 p-2.5 rounded text-center font-medium">
-                                {error}
-                            </div>
-                        )}
                     </CardContent>
                     <div className="flex items-center justify-end px-4 py-3 border-t border-white/5 bg-white/[0.02]">
                         <Button type="submit" disabled={saving} className="min-w-[100px] bg-emerald-500 hover:bg-emerald-600 text-white rounded text-sm h-9">
@@ -609,7 +612,7 @@ export default function ProfilePage() {
                                 />
 
                                 {twoFAError && (
-                                    <p className="text-sm text-red-400 text-center">{twoFAError}</p>
+                                    <p className="text-sm text-red-400 text-center sr-only">{twoFAError}</p>
                                 )}
 
                                 <div className="flex gap-2">
@@ -723,10 +726,6 @@ export default function ProfilePage() {
                                 />
                             </div>
 
-                            {twoFAError && (
-                                <p className="text-sm text-red-400 text-center">{twoFAError}</p>
-                            )}
-
                             <div className="flex gap-2">
                                 <Button
                                     type="button"
@@ -789,10 +788,6 @@ export default function ProfilePage() {
                                     />
                                 </div>
                             </div>
-
-                            {twoFAError && (
-                                <p className="text-sm text-red-400 text-center">{twoFAError}</p>
-                            )}
 
                             <div className="flex gap-2">
                                 <Button

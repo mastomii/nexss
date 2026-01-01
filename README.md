@@ -50,6 +50,7 @@ When your XSS payload triggers on a vulnerable application, NeXSS captures compr
 | Storage Extraction | Captures localStorage and sessionStorage data |
 | Request Details | Logs URL, origin, referer, user-agent, and IP address |
 | Persistent Sessions | Maintain connection with compromised browsers for JS command execution |
+| **Traffic Interception** | **NEW** - Observe HTTP requests/responses within victim's browser session |
 | AES-256 Encryption | Secure communication channel for persistent sessions |
 | Telegram Notifications | Real-time alerts with screenshots when XSS triggers |
 | Object Storage | Store screenshots in S3, MinIO, or Cloudflare R2 |
@@ -182,6 +183,58 @@ Enable persistent mode to maintain a connection with compromised browsers. This 
 </p>
 
 > **Note:** AES encryption for persistent sessions requires the target page to be served over HTTPS (Web Crypto API limitation). On HTTP targets, commands are sent unencrypted.
+
+### Traffic Interception (NEW)
+
+**Traffic Interception** allows you to observe HTTP requests and responses happening within the victim's browser session. This feature provides visibility into API calls, form submissions, and navigation events.
+
+<p align="left">
+  <img src="https://github.com/mastomii/nexss/blob/main/images/nexss-traffic-interception-1.png?raw=true)" alt="NeXSS Traffic Interception" width="800">
+</p>
+
+<p align="left">
+  <img src="https://github.com/mastomii/nexss/blob/main/images/nexss-traffic-interception-2.png?raw=true)" alt="NeXSS Traffic Interception" width="800">
+</p>
+
+<p align="left">
+  <img src="https://github.com/mastomii/nexss/blob/main/images/nexss-traffic-interception-3.png?raw=true)" alt="NeXSS Traffic Interception" width="800">
+</p>
+
+#### What It Captures
+
+| Type | Description |
+|------|-------------|
+| `fetch` | Fetch API request + response (combined) |
+| `xhr` | XMLHttpRequest + response (combined) |
+| `form` | Form submission request data |
+| `navigation` | Page navigation events |
+
+#### Key Features
+
+- **Unified Request/Response Capture** - Each traffic entry contains both request and response data
+- **Complete HTTP Headers** - Reconstructs browser-inferred headers (Host, User-Agent, Accept, etc.)
+- **Raw HTTP Format** - Easy copy-paste to tools like Burp Suite
+- **Real-time Session Status** - Connected/Disconnected/Terminated states
+- **Color-coded UI** - Methods (GET=green, POST=amber, etc.) and status codes (2xx=green, 4xx+=red)
+- **Pagination** - 20 items per page for large traffic volumes
+- **One-click Copy** - Copy URLs, full requests, and full responses
+
+#### How to Enable
+
+1. Go to **Settings** → **XSS Payload Settings**
+2. Enable **Persistent Mode**
+3. Enable **Advanced Persistent Mode (Experimental)**
+4. *(Optional)* Generate an **AES-256 encryption key** for encrypted communication
+
+#### Known Limitations
+
+- **Race Condition** - Requests firing before DOM ready may not be captured
+- **HttpOnly Cookies** - Cannot be read via JavaScript
+- **Cross-Origin** - Cannot read response bodies from cross-origin requests (CORS)
+- **HTTPS Required** - AES-256 encryption only works on HTTPS targets
+- **Body Size Limits** - Request/response bodies truncated to 10KB
+
+> **Note:** Traffic Interception is marked as **Experimental**. This is application-layer observation only, not network-level packet capture.
 
 ## Configuration
 

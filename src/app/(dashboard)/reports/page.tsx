@@ -19,6 +19,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useSettings } from '@/lib/settings-context';
+import { toast } from 'sonner';
 
 // Reuse the visual logic from Dashboard but applied to Reports
 interface Report {
@@ -85,6 +86,9 @@ export default function ReportsPage() {
         });
         if (res.ok) {
             fetchReports(pagination.page, perPage);
+            toast.success(archived ? 'Report archived' : 'Report unarchived');
+        } else {
+            toast.error('Failed to update report');
         }
     };
 
@@ -99,6 +103,10 @@ export default function ReportsPage() {
             });
             if (res.ok) {
                 fetchReports(pagination.page, perPage);
+                toast.success(`${selectedIds.size} reports ${archive ? 'archived' : 'unarchived'}`);
+                setSelectedIds(new Set());
+            } else {
+                toast.error('Failed to update reports');
             }
         } finally {
             setBulkActioning(false);
@@ -119,9 +127,12 @@ export default function ReportsPage() {
                 setDeleteModal({ open: false, report: null });
                 setSelectedIds(new Set());
                 fetchReports(pagination.page, perPage);
+                toast.success(`${idsArray.length} reports deleted`);
+            } else {
+                toast.error('Failed to delete reports');
             }
         } catch {
-            // Error handled silently
+            toast.error('Something went wrong');
         } finally {
             setBulkActioning(false);
         }
@@ -138,6 +149,9 @@ export default function ReportsPage() {
         if (res.ok) {
             setDeleteModal({ open: false, report: null });
             fetchReports(pagination.page, perPage);
+            toast.success('Report deleted');
+        } else {
+            toast.error('Failed to delete report');
         }
         setDeleting(false);
     };

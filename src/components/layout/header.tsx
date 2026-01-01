@@ -3,11 +3,13 @@
 import { useState, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Menu, Moon, User, LogOut, ChevronDown, Settings } from 'lucide-react';
+import { Menu, Moon, User, LogOut, ChevronDown, Settings, PanelLeftClose, PanelLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface HeaderProps {
     setSidebarOpen: (open: boolean) => void;
+    sidebarCollapsed: boolean;
+    setSidebarCollapsed: (collapsed: boolean) => void;
 }
 
 interface UserProfile {
@@ -17,7 +19,7 @@ interface UserProfile {
     rank: number;
 }
 
-export function Header({ setSidebarOpen }: HeaderProps) {
+export function Header({ setSidebarOpen, sidebarCollapsed, setSidebarCollapsed }: HeaderProps) {
     const pathname = usePathname();
     const router = useRouter();
     const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -54,7 +56,7 @@ export function Header({ setSidebarOpen }: HeaderProps) {
 
     return (
         <header className="sticky top-0 z-40 h-14 bg-[#09090b] flex items-center justify-between px-4 lg:px-6 border-b border-[#1f1f22]">
-            {/* Left: Mobile Toggle + Breadcrumb */}
+            {/* Left: Mobile Toggle + Desktop Collapse Toggle + Breadcrumb */}
             <div className="flex items-center gap-3">
                 <Button
                     variant="ghost"
@@ -63,6 +65,21 @@ export function Header({ setSidebarOpen }: HeaderProps) {
                     className="lg:hidden text-white h-8 w-8"
                 >
                     <Menu className="h-5 w-5" />
+                </Button>
+
+                {/* Desktop Sidebar Collapse Toggle */}
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+                    className="hidden lg:flex text-muted-foreground hover:text-white h-8 w-8"
+                    title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+                >
+                    {sidebarCollapsed ? (
+                        <PanelLeft className="h-5 w-5" />
+                    ) : (
+                        <PanelLeftClose className="h-5 w-5" />
+                    )}
                 </Button>
 
                 <div className="hidden md:flex items-center text-sm font-medium text-muted-foreground">

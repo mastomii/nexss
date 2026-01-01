@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { TimezoneSelect } from '@/components/ui/timezone-select';
 import { useSettings } from '@/lib/settings-context';
+import { toast } from 'sonner';
 
 interface AppSettings {
     app_name: string;
@@ -151,9 +152,14 @@ export default function SettingsPage() {
             if (res.ok) {
                 setSaved(true);
                 setTimeout(() => setSaved(false), 2000);
+                toast.success('Application settings saved');
                 // Refresh global settings context
                 await refreshSettings();
+            } else {
+                toast.error('Failed to save settings');
             }
+        } catch {
+            toast.error('Something went wrong');
         } finally {
             setSaving(false);
         }
@@ -172,8 +178,13 @@ export default function SettingsPage() {
             if (res.ok) {
                 setSavedStorage(true);
                 setTimeout(() => setSavedStorage(false), 2000);
+                toast.success('Storage settings saved');
                 fetchMigrationStatus();
+            } else {
+                toast.error('Failed to save storage settings');
             }
+        } catch {
+            toast.error('Something went wrong');
         } finally {
             setSavingStorage(false);
         }
@@ -201,8 +212,14 @@ export default function SettingsPage() {
             });
             const data = await res.json();
             setConnectionResult(data);
+            if (data.success) {
+                toast.success('Connection successful');
+            } else {
+                toast.error(data.error || 'Connection failed');
+            }
         } catch (err) {
             setConnectionResult({ success: false, error: 'Failed to test connection' });
+            toast.error('Failed to test connection');
         } finally {
             setTestingConnection(false);
         }
@@ -235,9 +252,13 @@ export default function SettingsPage() {
             if (data.success) {
                 setMigrationResult({ migrated: data.migrated, failed: data.failed });
                 fetchMigrationStatus();
+                toast.success(`Migrated ${data.migrated} screenshots${data.failed > 0 ? `, ${data.failed} failed` : ''}`);
+            } else {
+                toast.error('Migration failed');
             }
         } catch (err) {
             console.error('Migration failed:', err);
+            toast.error('Migration failed');
         } finally {
             setMigrating(false);
         }
@@ -260,8 +281,14 @@ export default function SettingsPage() {
             });
             const data = await res.json();
             setTokenResult(data);
+            if (data.success) {
+                toast.success(`Bot verified: @${data.botName}`);
+            } else {
+                toast.error(data.error || 'Invalid bot token');
+            }
         } catch {
             setTokenResult({ success: false, error: 'Failed to test token' });
+            toast.error('Failed to verify token');
         } finally {
             setTestingToken(false);
         }
@@ -284,9 +311,13 @@ export default function SettingsPage() {
             setChatIdResult(data);
             if (data.success && data.chatId) {
                 setTelegramSettings(prev => ({ ...prev, telegram_chat_id: data.chatId }));
+                toast.success('Chat ID detected');
+            } else {
+                toast.warning(data.error || 'Could not detect chat ID');
             }
         } catch {
             setChatIdResult({ success: false, error: 'Failed to get chat ID' });
+            toast.error('Failed to get chat ID');
         } finally {
             setGettingChatId(false);
         }
@@ -308,8 +339,14 @@ export default function SettingsPage() {
             });
             const data = await res.json();
             setTestMessageResult(data);
+            if (data.success) {
+                toast.success('Test message sent! Check your Telegram.');
+            } else {
+                toast.error(data.error || 'Failed to send test message');
+            }
         } catch {
             setTestMessageResult({ success: false, error: 'Failed to send test message' });
+            toast.error('Failed to send test message');
         } finally {
             setSendingTest(false);
         }
@@ -327,7 +364,12 @@ export default function SettingsPage() {
             if (res.ok) {
                 setSavedTelegram(true);
                 setTimeout(() => setSavedTelegram(false), 2000);
+                toast.success('Telegram settings saved');
+            } else {
+                toast.error('Failed to save Telegram settings');
             }
+        } catch {
+            toast.error('Something went wrong');
         } finally {
             setSavingTelegram(false);
         }
