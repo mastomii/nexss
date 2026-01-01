@@ -206,7 +206,7 @@ export default function SettingsPage() {
             } else {
                 toast.error(data.error || 'Connection failed');
             }
-        } catch (err) {
+        } catch {
             setConnectionResult({ success: false, error: 'Failed to test connection' });
             toast.error('Failed to test connection');
         } finally {

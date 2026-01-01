@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSession, logAction } from '@/lib/auth';
-import { query, queryOne, User, generateId } from '@/lib/db';
+import { query, queryOne, User } from '@/lib/db';
 import { getClientIP } from '@/lib/utils';
 import {
     generateSecret,

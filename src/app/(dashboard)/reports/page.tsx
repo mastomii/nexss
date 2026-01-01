@@ -77,6 +77,7 @@ export default function ReportsPage() {
 
     useEffect(() => {
         fetchReports(1, perPage);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [showArchived, perPage]);
 
     const handleArchive = async (id: string, archived: boolean) => {

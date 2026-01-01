@@ -3,7 +3,7 @@ import { query, queryOne, generateId } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { corsHeaders } from '@/lib/cors';
 import { checkRateLimit, getClientIPFromRequest, rateLimitExceededResponse } from '@/lib/rate-limit';
-import { persistRequestSchema, persistCommandSchema, safeValidate } from '@/lib/validations';
+import { persistRequestSchema, safeValidate } from '@/lib/validations';
 import crypto from 'crypto';
 
 interface PersistSession {

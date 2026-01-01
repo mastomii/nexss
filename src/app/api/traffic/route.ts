@@ -78,7 +78,18 @@ export async function POST(request: Request) {
             );
         }
         
-        let { rid, type, method, url, reqHeaders, reqBody, resHeaders, resBody, status, encrypted, data } = validation.data;
+        const { type: typeParam, method: methodParam, url: urlParam, reqHeaders: reqHeadersParam, reqBody: reqBodyParam, resHeaders: resHeadersParam, resBody: resBodyParam, status: statusParam, encrypted, data } = validation.data;
+        
+        // Mutable variables for potential decryption override
+        const rid = validation.data.rid;
+        let type = typeParam;
+        let method = methodParam;
+        let url = urlParam;
+        let reqHeaders = reqHeadersParam;
+        let reqBody = reqBodyParam;
+        let resHeaders = resHeadersParam;
+        let resBody = resBodyParam;
+        let status = statusParam;
 
         // Handle encrypted payload
         if (encrypted && data) {

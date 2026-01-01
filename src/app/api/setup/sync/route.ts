@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { Pool } from 'pg';
-import { isDatabaseUrlConfigured, checkDatabaseHealth, getExpectedSchema } from '@/lib/db-health';
+import { isDatabaseUrlConfigured, checkDatabaseHealth } from '@/lib/db-health';
 
 export const dynamic = 'force-dynamic';
 

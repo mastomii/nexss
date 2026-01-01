@@ -1,10 +1,9 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { validatePassword, getStrengthColor, getStrengthProgress, generateSecurePassword } from '@/lib/password-policy';
 import type { PasswordStrengthResult, PasswordPolicy } from '@/lib/password-policy';
 import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
 
 // ============================================
 // TYPES
@@ -42,18 +41,15 @@ export function PasswordInput({
   disabled = false,
 }: PasswordInputProps) {
   const [showPassword, setShowPassword] = useState(false);
-  const [validation, setValidation] = useState<PasswordStrengthResult | null>(null);
   const [focused, setFocused] = useState(false);
 
-  // Validate on value change
-  useEffect(() => {
-    if (value) {
-      const result = validatePassword(value, policy, context);
-      setValidation(result);
-      onValidationChange?.(result);
-    } else {
-      setValidation(null);
-    }
+  // Compute validation synchronously (no effect needed)
+  const validation = useMemo(() => {
+    if (!value) return null;
+    const result = validatePassword(value, policy, context);
+    // Call callback if provided (side effect in render is ok for callbacks)
+    onValidationChange?.(result);
+    return result;
   }, [value, policy, context, onValidationChange]);
 
   const handleGeneratePassword = useCallback(() => {

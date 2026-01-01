@@ -556,6 +556,7 @@ export default function ProfilePage() {
                                 {/* QR Code */}
                                 <div className="flex justify-center">
                                     <div className="p-4 bg-white rounded-lg">
+                                        {/* eslint-disable-next-line @next/next/no-img-element */}
                                         <img src={twoFAQRCode} alt="2FA QR Code" className="w-48 h-48" />
                                     </div>
                                 </div>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useMemo } from 'react';
 import Image from 'next/image';
 import { Home, ArrowLeft } from 'lucide-react';
 
@@ -13,26 +13,27 @@ interface Star {
     animationDelay: string;
 }
 
+// Generate stars once at module level (deterministic for SSR)
+function generateStars(count: number): Star[] {
+    const stars: Star[] = [];
+    // Use deterministic pseudo-random values for SSR consistency
+    for (let i = 0; i < count; i++) {
+        const seed = (i * 127 + 31) % 100;
+        stars.push({
+            id: i,
+            top: `${seed}%`,
+            left: `${((i * 73 + 17) % 100)}%`,
+            size: `${(seed % 3) + 1}px`,
+            opacity: (seed % 100) / 100,
+            animationDelay: `${(seed % 5)}s`,
+        });
+    }
+    return stars;
+}
+
 // Star Field Component
 function StarField() {
-    const [stars, setStars] = useState<Star[]>([]);
-
-    useEffect(() => {
-        const newStars: Star[] = [];
-        const starCount = 100;
-
-        for (let i = 0; i < starCount; i++) {
-            newStars.push({
-                id: i,
-                top: `${Math.random() * 100}%`,
-                left: `${Math.random() * 100}%`,
-                size: `${Math.random() * 3 + 1}px`,
-                opacity: Math.random(),
-                animationDelay: `${Math.random() * 5}s`,
-            });
-        }
-        setStars(newStars);
-    }, []);
+    const stars = useMemo(() => generateStars(100), []);
 
     return (
         <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">

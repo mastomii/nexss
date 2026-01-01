@@ -12,11 +12,6 @@ interface RateLimitEntry {
     resetTime: number;
 }
 
-interface RateLimitConfig {
-    maxRequests: number;
-    windowMs: number;
-}
-
 // In-memory store for rate limits
 // In production, consider Redis for distributed rate limiting
 const rateLimitStore = new Map<string, RateLimitEntry>();

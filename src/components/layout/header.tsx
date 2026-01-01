@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Menu, Moon, User, LogOut, ChevronDown, Settings, PanelLeftClose, PanelLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import useSWR from 'swr';
 
 interface HeaderProps {
     setSidebarOpen: (open: boolean) => void;
@@ -19,27 +20,16 @@ interface UserProfile {
     rank: number;
 }
 
+const fetcher = (url: string) => fetch(url).then(res => res.ok ? res.json() : null);
+
 export function Header({ setSidebarOpen, sidebarCollapsed, setSidebarCollapsed }: HeaderProps) {
     const pathname = usePathname();
     const router = useRouter();
     const [userMenuOpen, setUserMenuOpen] = useState(false);
-    const [profile, setProfile] = useState<UserProfile | null>(null);
-
-    useEffect(() => {
-        fetchProfile();
-    }, []);
-
-    const fetchProfile = async () => {
-        try {
-            const res = await fetch('/api/user');
-            if (res.ok) {
-                const data = await res.json();
-                setProfile(data.user);
-            }
-        } catch (e) {
-            console.error('Failed to fetch profile:', e);
-        }
-    };
+    
+    // Use SWR for data fetching - avoids setState in effect warning
+    const { data } = useSWR<{ user: UserProfile }>('/api/user', fetcher);
+    const profile = data?.user || null;
 
     // Simple breadcrumb logic
     const getPageName = () => {

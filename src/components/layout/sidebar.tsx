@@ -2,17 +2,17 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import {
     LayoutDashboard,
     Crosshair,
     FileText,
     Settings,
-    LogOut,
     X,
     User,
     ChevronLeft,
-    ChevronRight
+    ChevronRight,
+    LucideIcon
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -51,16 +51,9 @@ const menuGroups = [
 
 export function Sidebar({ sidebarOpen, setSidebarOpen, collapsed, setCollapsed }: SidebarProps) {
     const pathname = usePathname();
-    const router = useRouter();
     const { appName } = useSettings();
 
-    const handleLogout = async () => {
-        await fetch('/api/auth/logout', { method: 'POST' });
-        router.push('/login');
-        router.refresh();
-    };
-
-    const NavItem = ({ item }: { item: { href: string; label: string; icon: any } }) => {
+    const NavItem = ({ item }: { item: { href: string; label: string; icon: LucideIcon } }) => {
         const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
         const Icon = item.icon;
 

@@ -86,7 +86,8 @@ export async function login(
         return null;
     }
 
-    const { password: _, ...userWithoutPassword } = user;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { password: _password, ...userWithoutPassword } = user;
 
     // Check if 2FA is enabled
     if (user.totp_enabled) {
@@ -182,7 +183,8 @@ export async function getCurrentUser(): Promise<Omit<User, 'password'> | null> {
         return null;
     }
 
-    const { password: _, ...userWithoutPassword } = user;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { password: _password, ...userWithoutPassword } = user;
     return userWithoutPassword;
 }
 

@@ -509,6 +509,7 @@ export default function ReportDetailPage() {
                                 className="rounded border border-[#27272a] bg-[#09090b] overflow-hidden cursor-pointer hover:border-[#3f3f46] transition-colors"
                                 onClick={openScreenshotFullscreen}
                             >
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
                                 <img
                                     src={getScreenshotUrl(report.data.screenshot, report.data.screenshot_storage)}
                                     alt="Page screenshot"

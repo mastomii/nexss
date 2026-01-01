@@ -1,10 +1,9 @@
 import { NextResponse } from 'next/server';
-import { query, queryOne, ReportData } from '@/lib/db';
+import { query, ReportData } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { 
     getObjectStorageConfig, 
-    uploadToStorage,
-    deleteFromStorage 
+    uploadToStorage
 } from '@/lib/object-storage';
 import { readFile, unlink } from 'fs/promises';
 import { join } from 'path';
