@@ -3,9 +3,20 @@ import type { NextRequest } from 'next/server';
 import { jwtVerify } from 'jose';
 import { corsHeaders } from '@/lib/cors';
 
-const JWT_SECRET = new TextEncoder().encode(
-    process.env.JWT_SECRET || 'fallback-secret-change-me'
-);
+// SECURITY: JWT_SECRET must be set in production
+function getJWTSecret(): Uint8Array {
+    const secret = process.env.JWT_SECRET;
+    if (!secret) {
+        if (process.env.NODE_ENV === 'production') {
+            throw new Error('JWT_SECRET environment variable is required in production');
+        }
+        // Development fallback - same as auth.ts for consistency
+        return new TextEncoder().encode('dev-only-insecure-secret-do-not-use-in-production');
+    }
+    return new TextEncoder().encode(secret);
+}
+
+const JWT_SECRET = getJWTSecret();
 
 // Routes that don't require authentication
 const publicRoutes = [

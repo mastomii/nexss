@@ -3,9 +3,23 @@ import bcrypt from 'bcrypt';
 import { cookies } from 'next/headers';
 import { query, queryOne, User, generateId } from './db';
 
-const JWT_SECRET = new TextEncoder().encode(
-    process.env.JWT_SECRET || 'fallback-secret-change-me'
-);
+// SECURITY: JWT_SECRET must be set in production
+function getJWTSecret(): Uint8Array {
+    const secret = process.env.JWT_SECRET;
+    if (!secret) {
+        if (process.env.NODE_ENV === 'production') {
+            throw new Error('JWT_SECRET environment variable is required in production');
+        }
+        console.warn('[SECURITY WARNING] JWT_SECRET not set. Using insecure fallback for development only.');
+        return new TextEncoder().encode('dev-only-insecure-secret-do-not-use-in-production');
+    }
+    if (secret.length < 32) {
+        console.warn('[SECURITY WARNING] JWT_SECRET should be at least 32 characters for adequate security.');
+    }
+    return new TextEncoder().encode(secret);
+}
+
+const JWT_SECRET = getJWTSecret();
 
 const COOKIE_NAME = 'nexss_session';
 const SESSION_DURATION = 7 * 24 * 60 * 60 * 1000; // 7 days

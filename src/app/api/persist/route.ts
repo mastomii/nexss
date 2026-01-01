@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { query, queryOne, generateId } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { corsHeaders } from '@/lib/cors';
+import { checkRateLimit, getClientIPFromRequest, rateLimitExceededResponse } from '@/lib/rate-limit';
 import crypto from 'crypto';
 
 interface PersistSession {
@@ -71,6 +72,14 @@ export async function OPTIONS(request: NextRequest) {
 // POST - Client polling for commands (called by XSS payload)
 export async function POST(request: Request) {
     try {
+        // Rate limiting - 100 requests/minute per IP for persist (higher limit for polling)
+        const clientIP = getClientIPFromRequest(request);
+        const rateLimitResult = checkRateLimit(clientIP, 'persist');
+        
+        if (!rateLimitResult.allowed) {
+            return rateLimitExceededResponse(rateLimitResult);
+        }
+
         const body = await request.json();
         const { rid, response, encrypted, nocrypto, status } = body;
 

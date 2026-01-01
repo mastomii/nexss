@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { query, queryOne, generateId, Setting } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { corsHeaders } from '@/lib/cors';
+import { checkRateLimit, getClientIPFromRequest, rateLimitExceededResponse } from '@/lib/rate-limit';
 import crypto from 'crypto';
 
 interface InterceptedTraffic {
@@ -57,6 +58,14 @@ export async function OPTIONS(request: NextRequest) {
 // POST - Receive intercepted traffic from XSS payload (public, CORS enabled)
 export async function POST(request: Request) {
     try {
+        // Rate limiting - 200 requests/minute per IP for traffic (high volume expected)
+        const clientIP = getClientIPFromRequest(request);
+        const rateLimitResult = checkRateLimit(clientIP, 'traffic');
+        
+        if (!rateLimitResult.allowed) {
+            return rateLimitExceededResponse(rateLimitResult);
+        }
+
         const body = await request.json();
         let { rid, type, method, url, reqHeaders, reqBody, resHeaders, resBody, status, encrypted, data } = body;
 

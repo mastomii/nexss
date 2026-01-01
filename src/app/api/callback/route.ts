@@ -4,6 +4,7 @@ import { getClientIP, compressString } from '@/lib/utils';
 import { getObjectStorageConfig, uploadToStorage } from '@/lib/object-storage';
 import { sendXSSNotification } from '@/lib/telegram';
 import { corsHeaders } from '@/lib/cors';
+import { checkRateLimit, getClientIPFromRequest, createRateLimitHeaders, rateLimitExceededResponse } from '@/lib/rate-limit';
 import { writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
 import { existsSync } from 'fs';
@@ -41,6 +42,14 @@ export async function GET() {
 // POST - Receive XSS callback data
 export async function POST(request: NextRequest) {
     try {
+        // Rate limiting - 30 requests/minute per IP for callback
+        const clientIP = getClientIPFromRequest(request);
+        const rateLimitResult = checkRateLimit(clientIP, 'callback');
+        
+        if (!rateLimitResult.allowed) {
+            return rateLimitExceededResponse(rateLimitResult);
+        }
+
         // Parse incoming data - be very permissive
         let data: CallbackData;
 
@@ -68,8 +77,8 @@ export async function POST(request: NextRequest) {
             return jsonResponse({ error: 'Invalid data' }, 400);
         }
 
-        // Get client IP
-        const clientIP = data.ip || getClientIP(request);
+        // Get client IP from data or request headers
+        const reportIP = data.ip || getClientIP(request);
 
         // Get user agent
         const userAgent = data['user-agent'] || request.headers.get('user-agent') || '';
@@ -111,7 +120,7 @@ export async function POST(request: NextRequest) {
                 origin.substring(0, 500),
                 data.referer?.substring(0, 2000) || null,
                 userAgent.substring(0, 1000) || null,
-                clientIP.substring(0, 100) || null,
+                reportIP.substring(0, 100) || null,
                 data.cookies || null,
             ]
         );
@@ -225,7 +234,7 @@ export async function POST(request: NextRequest) {
             id: reportId,
             uri: data.uri || null,
             origin: origin,
-            ip: clientIP,
+            ip: reportIP,
             userAgent: userAgent,
             triggeredAt: new Date().toISOString(),
             screenshotBuffer: screenshotBuffer,
