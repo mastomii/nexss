@@ -22,6 +22,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
 type TabType = 'settings' | 'payloads' | 'notes';
 
@@ -75,16 +76,24 @@ export default function PayloadsPage() {
 
     const handleSave = async () => {
         setSaving(true);
-        const res = await fetch('/api/settings', {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ settings }),
-        });
-        if (res.ok) {
-            setSaved(true);
-            setTimeout(() => setSaved(false), 2000);
+        try {
+            const res = await fetch('/api/settings', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ settings }),
+            });
+            if (res.ok) {
+                setSaved(true);
+                setTimeout(() => setSaved(false), 2000);
+                toast.success('Payload settings saved');
+            } else {
+                toast.error('Failed to save settings');
+            }
+        } catch {
+            toast.error('Something went wrong');
+        } finally {
+            setSaving(false);
         }
-        setSaving(false);
     };
 
     const toggleSetting = (key: keyof SettingsData) => {
@@ -145,6 +154,7 @@ export default function PayloadsPage() {
         await navigator.clipboard.writeText(text);
         setCopiedIndex(index);
         setTimeout(() => setCopiedIndex(null), 2000);
+        toast.success('Payload copied to clipboard');
     };
 
     const tabs = [

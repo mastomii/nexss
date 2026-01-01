@@ -10,7 +10,9 @@ import {
     Settings,
     LogOut,
     X,
-    User
+    User,
+    ChevronLeft,
+    ChevronRight
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -19,6 +21,8 @@ import { useSettings } from '@/lib/settings-context';
 export interface SidebarProps {
     sidebarOpen: boolean;
     setSidebarOpen: (open: boolean) => void;
+    collapsed: boolean;
+    setCollapsed: (collapsed: boolean) => void;
 }
 
 // Menu groups
@@ -45,7 +49,7 @@ const menuGroups = [
     },
 ];
 
-export function Sidebar({ sidebarOpen, setSidebarOpen }: SidebarProps) {
+export function Sidebar({ sidebarOpen, setSidebarOpen, collapsed, setCollapsed }: SidebarProps) {
     const pathname = usePathname();
     const router = useRouter();
     const { appName } = useSettings();
@@ -64,15 +68,17 @@ export function Sidebar({ sidebarOpen, setSidebarOpen }: SidebarProps) {
             <Link
                 href={item.href}
                 onClick={() => setSidebarOpen(false)}
+                title={collapsed ? item.label : undefined}
                 className={cn(
                     "flex items-center gap-2.5 px-3 py-2 rounded text-sm font-medium transition-all duration-200",
+                    collapsed && "justify-center px-2",
                     isActive
                         ? "bg-gradient-to-r from-fuchsia-600 to-purple-600 text-white shadow-lg shadow-purple-500/20"
                         : "text-muted-foreground hover:text-white hover:bg-white/5"
                 )}
             >
-                <Icon className={cn("h-4 w-4", isActive ? "text-white" : "text-muted-foreground")} />
-                <span>{item.label}</span>
+                <Icon className={cn("h-4 w-4 flex-shrink-0", isActive ? "text-white" : "text-muted-foreground")} />
+                {!collapsed && <span>{item.label}</span>}
             </Link>
         );
     };
@@ -90,27 +96,39 @@ export function Sidebar({ sidebarOpen, setSidebarOpen }: SidebarProps) {
             {/* Sidebar */}
             <aside
                 className={cn(
-                    "fixed inset-y-0 left-0 z-50 w-56 bg-[#09090b] border-r border-[#1f1f22] transform transition-transform duration-200 ease-in-out flex flex-col",
+                    "fixed inset-y-0 left-0 z-50 bg-[#09090b] border-r border-[#1f1f22] transform transition-all duration-200 ease-in-out flex flex-col",
+                    collapsed ? "w-16" : "w-56",
                     sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
                 )}
             >
                 {/* Logo Area */}
-                <div className="h-14 flex items-center px-4">
-                    <div className="flex items-center gap-2">
-                        <Image
-                            src="/nexss-logo-horizontal.png"
-                            alt={appName}
-                            width={140}
-                            height={32}
-                            className="h-8 w-auto"
-                            priority
-                        />
+                <div className="h-14 flex items-center px-4 justify-between">
+                    <div className={cn("flex items-center", collapsed && "w-full justify-center")}>
+                        {collapsed ? (
+                            <Image
+                                src="/nexss-favicon.png"
+                                alt={appName}
+                                width={32}
+                                height={32}
+                                className="h-8 w-8"
+                                priority
+                            />
+                        ) : (
+                            <Image
+                                src="/nexss-logo-horizontal.png"
+                                alt={appName}
+                                width={140}
+                                height={32}
+                                className="h-8 w-auto"
+                                priority
+                            />
+                        )}
                     </div>
                     <Button
                         variant="ghost"
                         size="icon"
                         onClick={() => setSidebarOpen(false)}
-                        className="ml-auto lg:hidden text-muted-foreground h-8 w-8"
+                        className="lg:hidden text-muted-foreground h-8 w-8"
                     >
                         <X className="h-4 w-4" />
                     </Button>
@@ -120,9 +138,11 @@ export function Sidebar({ sidebarOpen, setSidebarOpen }: SidebarProps) {
                 <div className="flex-1 px-3 py-4 overflow-y-auto space-y-5 scrollbar-none">
                     {menuGroups.map((group) => (
                         <div key={group.label}>
-                            <p className="px-3 text-xs font-semibold text-muted-foreground/50 uppercase tracking-wider mb-2">
-                                {group.label}
-                            </p>
+                            {!collapsed && (
+                                <p className="px-3 text-xs font-semibold text-muted-foreground/50 uppercase tracking-wider mb-2">
+                                    {group.label}
+                                </p>
+                            )}
                             <div className="space-y-1">
                                 {group.items.map((item) => (
                                     <NavItem key={item.href} item={item} />
@@ -130,6 +150,28 @@ export function Sidebar({ sidebarOpen, setSidebarOpen }: SidebarProps) {
                             </div>
                         </div>
                     ))}
+                </div>
+
+                {/* Collapse Toggle Button - Desktop Only */}
+                <div className="hidden lg:flex p-3 border-t border-[#1f1f22]">
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setCollapsed(!collapsed)}
+                        className={cn(
+                            "w-full text-muted-foreground hover:text-white hover:bg-white/5",
+                            collapsed && "px-0 justify-center"
+                        )}
+                    >
+                        {collapsed ? (
+                            <ChevronRight className="h-4 w-4" />
+                        ) : (
+                            <>
+                                <ChevronLeft className="h-4 w-4 mr-2" />
+                                <span>Collapse</span>
+                            </>
+                        )}
+                    </Button>
                 </div>
             </aside>
         </>

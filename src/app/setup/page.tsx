@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
+import { toast } from 'sonner';
 import { 
     Database, 
     AlertCircle, 
@@ -86,9 +87,15 @@ export default function SetupPage() {
                 success: data.success,
                 message: data.message || (data.success ? 'Database synchronized!' : 'Sync failed'),
             });
-            if (data.success) await checkHealth();
+            if (data.success) {
+                toast.success('Database synchronized successfully!');
+                await checkHealth();
+            } else {
+                toast.error(data.message || 'Failed to sync database');
+            }
         } catch {
             setSyncResult({ success: false, message: 'Failed to sync database' });
+            toast.error('Failed to sync database');
         } finally {
             setSyncing(false);
         }

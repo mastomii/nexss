@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { TotpInput } from '@/components/ui/totp-input';
+import { toast } from 'sonner';
 
 type LoginStep = 'credentials' | '2fa';
 
@@ -15,13 +16,13 @@ export default function LoginPage() {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [totpCode, setTotpCode] = useState('');
-    const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
     const [checkingDb, setCheckingDb] = useState(true);
     const [step, setStep] = useState<LoginStep>('credentials');
     const [userId, setUserId] = useState<string | null>(null);
     const [useBackupCode, setUseBackupCode] = useState(false);
     const [backupCode, setBackupCode] = useState('');
+    const [totpError, setTotpError] = useState(false);
     const router = useRouter();
 
     // Check database health on mount - redirect to setup if there's an issue
@@ -51,7 +52,6 @@ export default function LoginPage() {
     const handleCredentialsSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
-        setError('');
 
         try {
             const res = await fetch('/api/auth/login', {
@@ -70,10 +70,10 @@ export default function LoginPage() {
             } else if (res.ok) {
                 router.push('/dashboard');
             } else {
-                setError(data.error || 'Invalid credentials');
+                toast.error(data.error || 'Invalid credentials');
             }
         } catch {
-            setError('Something went wrong');
+            toast.error('Something went wrong');
         } finally {
             setLoading(false);
         }
@@ -81,12 +81,12 @@ export default function LoginPage() {
 
     const handle2FASubmit = async (code?: string) => {
         setLoading(true);
-        setError('');
+        setTotpError(false);
 
         const tokenToVerify = code || (useBackupCode ? backupCode : totpCode);
 
         if (!tokenToVerify || (!useBackupCode && tokenToVerify.length !== 6)) {
-            setError('Please enter a valid code');
+            toast.error('Please enter a valid code');
             setLoading(false);
             return;
         }
@@ -107,11 +107,12 @@ export default function LoginPage() {
             if (res.ok) {
                 router.push('/dashboard');
             } else {
-                setError(data.error || 'Invalid verification code');
+                toast.error(data.error || 'Invalid verification code');
+                setTotpError(true);
                 setTotpCode('');
             }
         } catch {
-            setError('Something went wrong');
+            toast.error('Something went wrong');
         } finally {
             setLoading(false);
         }
@@ -124,7 +125,7 @@ export default function LoginPage() {
         setUserId(null);
         setTotpCode('');
         setBackupCode('');
-        setError('');
+        setTotpError(false);
         setUseBackupCode(false);
     };
 
@@ -191,12 +192,6 @@ export default function LoginPage() {
                                     />
                                 </div>
 
-                                {error && (
-                                    <div className="text-sm text-red-400 bg-red-400/10 p-2.5 rounded text-center font-medium">
-                                        {error}
-                                    </div>
-                                )}
-
                                 <Button
                                     type="submit"
                                     disabled={loading || !username || !password}
@@ -228,15 +223,9 @@ export default function LoginPage() {
                                     <TotpInput
                                         value={totpCode}
                                         onChange={setTotpCode}
-                                        error={!!error}
+                                        error={totpError}
                                         disabled={loading}
                                     />
-                                )}
-
-                                {error && (
-                                    <div className="text-sm text-red-400 bg-red-400/10 p-2.5 rounded text-center font-medium">
-                                        {error}
-                                    </div>
                                 )}
 
                                 <Button
@@ -267,7 +256,7 @@ export default function LoginPage() {
                                         type="button"
                                         onClick={() => {
                                             setUseBackupCode(!useBackupCode);
-                                            setError('');
+                                            setTotpError(false);
                                             setTotpCode('');
                                             setBackupCode('');
                                         }}
