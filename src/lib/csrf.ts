@@ -27,7 +27,7 @@ export function setCSRFCookie(response: NextResponse, token: string): void {
     response.cookies.set(CSRF_COOKIE_NAME, token, {
         httpOnly: false, // Must be readable by JS to send in header
         secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
+        sameSite: 'lax', // Changed from 'strict' to 'lax' for Vercel compatibility
         maxAge: 7 * 24 * 60 * 60, // 7 days (same as session)
         path: '/',
     });
