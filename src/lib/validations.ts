@@ -88,11 +88,19 @@ export const callbackDataSchema = z.object({
 // PERSIST SCHEMAS (Persistent Sessions)
 // ============================================
 
-// Status enum with empty string handling
-const persistStatusSchema = z.union([
-    z.enum(['active', 'popup_blocked', 'popup_opened', 'terminated', 'popup_error']),
-    z.literal('').transform(() => undefined), // Empty string becomes undefined
-]).optional().nullable();
+// Status enum with permissive handling - accepts any string value from payload
+// Using z.string() instead of enum to be fully permissive for XSS payload variations
+const persistStatusSchema = z.preprocess(
+    (val) => {
+        // Handle null, undefined, empty string, or non-string values
+        if (val === null || val === undefined || val === '' || typeof val !== 'string') {
+            return undefined;
+        }
+        // Accept any non-empty string status from payload
+        return val;
+    },
+    z.string().max(50).optional()
+);
 
 export const persistRequestSchema = z.object({
     rid: ulidSchema,
