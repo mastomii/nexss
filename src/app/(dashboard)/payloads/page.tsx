@@ -15,13 +15,14 @@ import {
     FlaskConical,
     Radio
 } from 'lucide-react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { apiPut } from '@/lib/api-client';
 import { toast } from 'sonner';
 
 type TabType = 'settings' | 'payloads' | 'notes';
@@ -77,11 +78,7 @@ export default function PayloadsPage() {
     const handleSave = async () => {
         setSaving(true);
         try {
-            const res = await fetch('/api/settings', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ settings }),
-            });
+            const res = await apiPut('/api/settings', { settings });
             if (res.ok) {
                 setSaved(true);
                 setTimeout(() => setSaved(false), 2000);

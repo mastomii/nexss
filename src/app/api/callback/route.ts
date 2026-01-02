@@ -4,6 +4,9 @@ import { getClientIP, compressString } from '@/lib/utils';
 import { getObjectStorageConfig, uploadToStorage } from '@/lib/object-storage';
 import { sendXSSNotification } from '@/lib/telegram';
 import { corsHeaders } from '@/lib/cors';
+import { checkRateLimit, getClientIPFromRequest, rateLimitExceededResponse } from '@/lib/rate-limit';
+import { callbackDataSchema, safeValidate } from '@/lib/validations';
+import { processScreenshot, base64ToBuffer } from '@/services/screenshot.service';
 import { writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
 import { existsSync } from 'fs';
@@ -41,6 +44,14 @@ export async function GET() {
 // POST - Receive XSS callback data
 export async function POST(request: NextRequest) {
     try {
+        // Rate limiting - 30 requests/minute per IP for callback
+        const clientIP = getClientIPFromRequest(request);
+        const rateLimitResult = checkRateLimit(clientIP, 'callback');
+        
+        if (!rateLimitResult.allowed) {
+            return rateLimitExceededResponse(rateLimitResult);
+        }
+
         // Parse incoming data - be very permissive
         let data: CallbackData;
 
@@ -68,8 +79,17 @@ export async function POST(request: NextRequest) {
             return jsonResponse({ error: 'Invalid data' }, 400);
         }
 
-        // Get client IP
-        const clientIP = data.ip || getClientIP(request);
+        // Validate with Zod schema (lenient for XSS data)
+        const validation = safeValidate(callbackDataSchema, data);
+        if (!validation.success) {
+            console.warn('[NeXSS] Callback validation warning:', validation.error);
+            // Don't reject - XSS data can be malformed, just log it
+        } else {
+            data = validation.data as CallbackData;
+        }
+
+        // Get client IP from data or request headers
+        const reportIP = data.ip || getClientIP(request);
 
         // Get user agent
         const userAgent = data['user-agent'] || request.headers.get('user-agent') || '';
@@ -111,7 +131,7 @@ export async function POST(request: NextRequest) {
                 origin.substring(0, 500),
                 data.referer?.substring(0, 2000) || null,
                 userAgent.substring(0, 1000) || null,
-                clientIP.substring(0, 100) || null,
+                reportIP.substring(0, 100) || null,
                 data.cookies || null,
             ]
         );
@@ -130,38 +150,45 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        // Process screenshot - save to file or object storage
-        let screenshot = data.screenshot || null;
+        // Process screenshot - save optimized version + thumbnail
+        const screenshot = data.screenshot || null;
         let screenshotPath: string | null = null;
         let screenshotStorage: string | null = null;
         let screenshotBuffer: Buffer | null = null;
         
         if (screenshot) {
             try {
-                // Remove data URL prefix if present
-                if (screenshot.startsWith('data:image')) {
-                    screenshot = screenshot.replace(/^data:image\/\w+;base64,/, '');
-                }
+                // Convert base64 to buffer
+                const originalBuffer = base64ToBuffer(screenshot);
                 
-                const buffer = Buffer.from(screenshot, 'base64');
-                screenshotBuffer = buffer; // Keep buffer for Telegram notification
-                const fileExt = 'png';
+                // Process screenshot: optimize and generate thumbnail
+                const processed = await processScreenshot(originalBuffer, {
+                    generatePreview: false,
+                    maxWidth: 1920,
+                    quality: 85,
+                });
+                
+                screenshotBuffer = processed.optimized; // Use optimized for Telegram
+                const fileExt = 'webp'; // Use WebP for better compression
                 const fileName = `${reportId}.${fileExt}`;
+                const thumbFileName = `${reportId}_thumb.${fileExt}`;
                 
                 // Check if object storage is enabled
                 const storageConfig = await getObjectStorageConfig();
                 
                 if (storageConfig.enabled) {
-                    // Upload to object storage
-                    const key = `screenshots/${fileName}`;
-                    const result = await uploadToStorage(storageConfig, key, buffer, 'image/png');
+                    // Upload optimized and thumbnail to object storage
+                    const [mainResult] = await Promise.all([
+                        uploadToStorage(storageConfig, `screenshots/${fileName}`, processed.optimized, 'image/webp'),
+                        uploadToStorage(storageConfig, `screenshots/${thumbFileName}`, processed.thumbnail, 'image/webp'),
+                    ]);
                     
-                    if (result.success && result.url) {
-                        screenshotPath = result.url;
+                    if (mainResult.success && mainResult.url) {
+                        screenshotPath = mainResult.url;
                         screenshotStorage = 's3';
+                        // Thumbnail also uploaded but we don't store path in DB
                     } else {
-                        // Fallback to local storage
-                        console.error('[NeXSS] Object storage upload failed, falling back to local:', result.error);
+                        console.error('[NeXSS] Object storage upload failed, falling back to local:', mainResult.error);
                         throw new Error('Object storage upload failed');
                     }
                 } else {
@@ -171,30 +198,51 @@ export async function POST(request: NextRequest) {
                         await mkdir(screenshotsDir, { recursive: true });
                     }
                     
-                    const filePath = join(screenshotsDir, fileName);
-                    await writeFile(filePath, buffer);
+                    // Save both optimized and thumbnail
+                    await Promise.all([
+                        writeFile(join(screenshotsDir, fileName), processed.optimized),
+                        writeFile(join(screenshotsDir, thumbFileName), processed.thumbnail),
+                    ]);
                     
                     screenshotPath = `/screenshots/${fileName}`;
+                    // Thumbnail saved as ${thumbFileName} but we don't store path in DB
                     screenshotStorage = 'local';
                 }
+                
+                console.log(`[NeXSS] Screenshot processed: ${Math.round(processed.metadata.originalSize / 1024)}KB -> ${Math.round(processed.metadata.optimizedSize / 1024)}KB (thumb: ${Math.round(processed.metadata.thumbnailSize / 1024)}KB)`);
             } catch (err) {
                 console.error('[NeXSS] Failed to save screenshot:', err);
-                // Fallback: try local storage if object storage failed
-                try {
-                    const buffer = Buffer.from(screenshot, 'base64');
-                    const fileName = `${reportId}.png`;
-                    const screenshotsDir = join(process.cwd(), 'data', 'screenshots');
-                    if (!existsSync(screenshotsDir)) {
-                        await mkdir(screenshotsDir, { recursive: true });
-                    }
-                    const filePath = join(screenshotsDir, fileName);
-                    await writeFile(filePath, buffer);
-                    screenshotPath = `/screenshots/${fileName}`;
-                    screenshotStorage = 'local';
-                } catch (localErr) {
-                    console.error('[NeXSS] Local fallback also failed:', localErr);
+                
+                // Check if we're in a serverless environment (read-only filesystem)
+                const isServerless = process.cwd().startsWith('/var/task') || 
+                                     process.env.AWS_LAMBDA_FUNCTION_NAME || 
+                                     process.env.VERCEL;
+                
+                if (isServerless) {
+                    // In serverless: cannot use local filesystem, need Object Storage (S3)
+                    console.warn('[NeXSS] Screenshot skipped: Configure Object Storage (S3/R2/MinIO) in Settings for serverless environments');
                     screenshotPath = null;
                     screenshotStorage = null;
+                    // Set screenshot_error so user knows why screenshot is missing
+                    data.screenshot_error = 'Serverless environment detected (Vercel/Lambda). Local filesystem is read-only. Please configure Object Storage (S3/R2/MinIO) in Settings > Storage to save screenshots.';
+                } else {
+                    // Not serverless: try local storage with original buffer
+                    try {
+                        const buffer = base64ToBuffer(screenshot);
+                        const fileName = `${reportId}.png`;
+                        const screenshotsDir = join(process.cwd(), 'data', 'screenshots');
+                        if (!existsSync(screenshotsDir)) {
+                            await mkdir(screenshotsDir, { recursive: true });
+                        }
+                        await writeFile(join(screenshotsDir, fileName), buffer);
+                        screenshotPath = `/screenshots/${fileName}`;
+                        screenshotStorage = 'local';
+                        screenshotBuffer = buffer;
+                    } catch (localErr) {
+                        console.error('[NeXSS] Local fallback also failed:', localErr);
+                        screenshotPath = null;
+                        screenshotStorage = null;
+                    }
                 }
             }
         }
@@ -225,7 +273,7 @@ export async function POST(request: NextRequest) {
             id: reportId,
             uri: data.uri || null,
             origin: origin,
-            ip: clientIP,
+            ip: reportIP,
             userAgent: userAgent,
             triggeredAt: new Date().toISOString(),
             screenshotBuffer: screenshotBuffer,

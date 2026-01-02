@@ -81,22 +81,109 @@ export function matchesDomain(origin: string, pattern: string): boolean {
     return origin === pattern;
 }
 
-// Compress string using pako (for large DOM content)
-export async function compressString(str: string): Promise<string> {
+// Compression types
+export type CompressionType = 'brotli' | 'gzip' | 'deflate';
+
+/**
+ * Compress string using Brotli (Node.js native, best compression)
+ * Falls back to deflate if Brotli unavailable
+ */
+export async function compressString(str: string, type: CompressionType = 'brotli'): Promise<string> {
     if (typeof window === 'undefined') {
-        const pako = await import('pako');
-        const compressed = pako.deflate(str);
-        return Buffer.from(compressed).toString('base64');
+        const zlib = await import('zlib');
+        const { promisify } = await import('util');
+        
+        let compressed: Buffer;
+        
+        if (type === 'brotli') {
+            // Brotli - best compression ratio
+            const brotliCompress = promisify(zlib.brotliCompress);
+            compressed = await brotliCompress(Buffer.from(str), {
+                params: {
+                    [zlib.constants.BROTLI_PARAM_MODE]: zlib.constants.BROTLI_MODE_TEXT,
+                    [zlib.constants.BROTLI_PARAM_QUALITY]: 6, // Balance speed/ratio (0-11)
+                }
+            });
+        } else if (type === 'gzip') {
+            const gzip = promisify(zlib.gzip);
+            compressed = await gzip(Buffer.from(str));
+        } else {
+            // Fallback to pako deflate for backwards compatibility
+            const pako = await import('pako');
+            const deflated = pako.deflate(str);
+            return Buffer.from(deflated).toString('base64');
+        }
+        
+        return compressed.toString('base64');
     }
     return str;
 }
 
+/**
+ * Decompress string - auto-detects compression type
+ */
 export async function decompressString(compressed: string): Promise<string> {
     if (typeof window === 'undefined') {
-        const pako = await import('pako');
         const buffer = Buffer.from(compressed, 'base64');
-        const decompressed = pako.inflate(buffer);
-        return new TextDecoder().decode(decompressed);
+        
+        // Try to detect compression type from magic bytes
+        const magic = buffer.slice(0, 2);
+        
+        // Brotli doesn't have standard magic bytes, so we try methods
+        const zlib = await import('zlib');
+        const { promisify } = await import('util');
+        
+        // Try Brotli first (most common for new data)
+        try {
+            const brotliDecompress = promisify(zlib.brotliDecompress);
+            const decompressed = await brotliDecompress(buffer);
+            return decompressed.toString('utf-8');
+        } catch {
+            // Not Brotli, try gzip/deflate
+        }
+        
+        // Check for gzip magic bytes (1f 8b)
+        if (magic[0] === 0x1f && magic[1] === 0x8b) {
+            try {
+                const gunzip = promisify(zlib.gunzip);
+                const decompressed = await gunzip(buffer);
+                return decompressed.toString('utf-8');
+            } catch {
+                // Fall through
+            }
+        }
+        
+        // Try pako deflate (legacy format)
+        try {
+            const pako = await import('pako');
+            const decompressed = pako.inflate(buffer);
+            return new TextDecoder().decode(decompressed);
+        } catch {
+            // If all else fails, return as-is (might be uncompressed)
+            return compressed;
+        }
     }
     return compressed;
+}
+
+/**
+ * Calculate compression stats
+ */
+export function getCompressionStats(original: string, compressed: string): {
+    originalSize: number;
+    compressedSize: number;
+    ratio: number;
+    savings: string;
+} {
+    const originalSize = Buffer.from(original).length;
+    const compressedSize = Buffer.from(compressed, 'base64').length;
+    const ratio = originalSize / compressedSize;
+    const savings = ((1 - compressedSize / originalSize) * 100).toFixed(1);
+    
+    return {
+        originalSize,
+        compressedSize,
+        ratio,
+        savings: `${savings}%`,
+    };
 }

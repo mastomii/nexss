@@ -6,6 +6,10 @@ const nextConfig: NextConfig = {
   env: {
     APP_VERSION: packageJson.version,
   },
+  // Set turbopack root to avoid lockfile warning
+  turbopack: {
+    root: process.cwd(),
+  },
   // Add CORS headers for payload API routes
   async headers() {
     return [

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 import {
     Eye,
@@ -19,6 +19,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useSettings } from '@/lib/settings-context';
+import { apiPatch, apiDelete } from '@/lib/api-client';
 import { toast } from 'sonner';
 
 // Reuse the visual logic from Dashboard but applied to Reports
@@ -76,14 +77,11 @@ export default function ReportsPage() {
 
     useEffect(() => {
         fetchReports(1, perPage);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [showArchived, perPage]);
 
     const handleArchive = async (id: string, archived: boolean) => {
-        const res = await fetch(`/api/reports/${id}`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ archived }),
-        });
+        const res = await apiPatch(`/api/reports/${id}`, { archived });
         if (res.ok) {
             fetchReports(pagination.page, perPage);
             toast.success(archived ? 'Report archived' : 'Report unarchived');
@@ -96,11 +94,7 @@ export default function ReportsPage() {
         if (selectedIds.size === 0) return;
         setBulkActioning(true);
         try {
-            const res = await fetch('/api/reports/bulk', {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ids: Array.from(selectedIds), archived: archive }),
-            });
+            const res = await apiPatch('/api/reports/bulk', { ids: Array.from(selectedIds), archived: archive });
             if (res.ok) {
                 fetchReports(pagination.page, perPage);
                 toast.success(`${selectedIds.size} reports ${archive ? 'archived' : 'unarchived'}`);
@@ -118,11 +112,7 @@ export default function ReportsPage() {
         setBulkActioning(true);
         try {
             const idsArray = Array.from(selectedIds);
-            const res = await fetch('/api/reports/bulk', {
-                method: 'DELETE',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ids: idsArray }),
-            });
+            const res = await apiDelete('/api/reports/bulk', { ids: idsArray });
             if (res.ok) {
                 setDeleteModal({ open: false, report: null });
                 setSelectedIds(new Set());
@@ -145,7 +135,7 @@ export default function ReportsPage() {
         }
         if (!deleteModal.report) return;
         setDeleting(true);
-        const res = await fetch(`/api/reports/${deleteModal.report.id}`, { method: 'DELETE' });
+        const res = await apiDelete(`/api/reports/${deleteModal.report.id}`);
         if (res.ok) {
             setDeleteModal({ open: false, report: null });
             fetchReports(pagination.page, perPage);
@@ -185,15 +175,17 @@ export default function ReportsPage() {
         }
     };
 
-    const filteredReports = reports.filter((report) => {
-        if (!searchTerm) return true;
-        const term = searchTerm.toLowerCase();
-        return (
-            report.origin?.toLowerCase().includes(term) ||
-            report.uri?.toLowerCase().includes(term) ||
-            report.ip?.toLowerCase().includes(term)
-        );
-    });
+    const filteredReports = useMemo(() => {
+        return reports.filter((report) => {
+            if (!searchTerm) return true;
+            const term = searchTerm.toLowerCase();
+            return (
+                report.origin?.toLowerCase().includes(term) ||
+                report.uri?.toLowerCase().includes(term) ||
+                report.ip?.toLowerCase().includes(term)
+            );
+        });
+    }, [reports, searchTerm]);
 
     const allSelected = filteredReports.length > 0 && selectedIds.size === filteredReports.length;
     const someSelected = selectedIds.size > 0 && selectedIds.size < filteredReports.length;

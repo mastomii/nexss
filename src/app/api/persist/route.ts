@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { query, queryOne, generateId } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { corsHeaders } from '@/lib/cors';
+import { checkRateLimit, getClientIPFromRequest, rateLimitExceededResponse } from '@/lib/rate-limit';
+import { persistRequestSchema, safeValidate } from '@/lib/validations';
+import { validateCSRF } from '@/lib/csrf';
 import crypto from 'crypto';
 
 interface PersistSession {
@@ -71,15 +74,26 @@ export async function OPTIONS(request: NextRequest) {
 // POST - Client polling for commands (called by XSS payload)
 export async function POST(request: Request) {
     try {
-        const body = await request.json();
-        const { rid, response, encrypted, nocrypto, status } = body;
+        // Rate limiting - 100 requests/minute per IP for persist (higher limit for polling)
+        const clientIP = getClientIPFromRequest(request);
+        const rateLimitResult = checkRateLimit(clientIP, 'persist');
+        
+        if (!rateLimitResult.allowed) {
+            return rateLimitExceededResponse(rateLimitResult);
+        }
 
-        if (!rid) {
+        const body = await request.json();
+        
+        // Validate input with Zod
+        const validation = safeValidate(persistRequestSchema, body);
+        if (!validation.success) {
             return NextResponse.json(
-                { error: 'Missing report id' },
+                { error: 'Invalid input', details: validation.error },
                 { status: 400, headers: corsHeaders }
             );
         }
+        
+        const { rid, response, encrypted, nocrypto, status } = validation.data;
 
         const encryptionKey = await getEncryptionKey();
 
@@ -106,7 +120,7 @@ export async function POST(request: Request) {
             }
             
             // If response is provided, store it (decrypt if encrypted)
-            if (response !== undefined) {
+            if (response !== undefined && response !== null) {
                 let plainResponse = response;
                 
                 // Decrypt response if it was encrypted and we have a key
@@ -163,7 +177,7 @@ export async function POST(request: Request) {
 }
 
 // PUT - Send command to a session via report_id
-export async function PUT(request: Request) {
+export async function PUT(request: NextRequest) {
     try {
         // Auth check - only authenticated users can send commands
         const authSession = await getSession();
@@ -172,6 +186,11 @@ export async function PUT(request: Request) {
         }
 
         const body = await request.json();
+        
+        // CSRF validation for authenticated state-changing request
+        const csrfError = validateCSRF(request, body);
+        if (csrfError) return csrfError;
+        
         const { report_id, command } = body;
 
         if (!report_id || !command) {

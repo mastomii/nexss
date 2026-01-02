@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { query, queryOne, generateId, Setting } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { corsHeaders } from '@/lib/cors';
+import { checkRateLimit, getClientIPFromRequest, rateLimitExceededResponse } from '@/lib/rate-limit';
+import { trafficDataSchema, safeValidate } from '@/lib/validations';
 import crypto from 'crypto';
 
 interface InterceptedTraffic {
@@ -57,8 +59,37 @@ export async function OPTIONS(request: NextRequest) {
 // POST - Receive intercepted traffic from XSS payload (public, CORS enabled)
 export async function POST(request: Request) {
     try {
+        // Rate limiting - 200 requests/minute per IP for traffic (high volume expected)
+        const clientIP = getClientIPFromRequest(request);
+        const rateLimitResult = checkRateLimit(clientIP, 'traffic');
+        
+        if (!rateLimitResult.allowed) {
+            return rateLimitExceededResponse(rateLimitResult);
+        }
+
         const body = await request.json();
-        let { rid, type, method, url, reqHeaders, reqBody, resHeaders, resBody, status, encrypted, data } = body;
+        
+        // Validate input with Zod
+        const validation = safeValidate(trafficDataSchema, body);
+        if (!validation.success) {
+            return NextResponse.json(
+                { error: 'Invalid input', details: validation.error },
+                { status: 400, headers: corsHeaders }
+            );
+        }
+        
+        const { type: typeParam, method: methodParam, url: urlParam, reqHeaders: reqHeadersParam, reqBody: reqBodyParam, resHeaders: resHeadersParam, resBody: resBodyParam, status: statusParam, encrypted, data } = validation.data;
+        
+        // Mutable variables for potential decryption override
+        const rid = validation.data.rid;
+        let type = typeParam;
+        let method = methodParam;
+        let url = urlParam;
+        let reqHeaders = reqHeadersParam;
+        let reqBody = reqBodyParam;
+        let resHeaders = resHeadersParam;
+        let resBody = resBodyParam;
+        let status = statusParam;
 
         // Handle encrypted payload
         if (encrypted && data) {
@@ -88,6 +119,24 @@ export async function POST(request: Request) {
                         { status: 400, headers: corsHeaders }
                     );
                 }
+            }
+        } else if (!encrypted && data) {
+            // Handle unencrypted JSON payload in data field (fallback when crypto.subtle unavailable)
+            try {
+                const parsed = JSON.parse(data);
+                type = parsed.type;
+                method = parsed.method;
+                url = parsed.url;
+                reqHeaders = parsed.reqHeaders;
+                reqBody = parsed.reqBody;
+                resHeaders = parsed.resHeaders;
+                resBody = parsed.resBody;
+                status = parsed.status;
+            } catch {
+                return NextResponse.json(
+                    { error: 'Invalid data payload' },
+                    { status: 400, headers: corsHeaders }
+                );
             }
         }
 

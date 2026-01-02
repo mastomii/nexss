@@ -1,16 +1,19 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useMemo } from 'react';
 import Link from 'next/link';
 import {
     Activity,
     Users,
     Folder,
     ArrowUpRight,
-    Shield
+    Shield,
+    RefreshCw
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSettings } from '@/lib/settings-context';
+import useSWR from 'swr';
+import { swrConfig } from '@/lib/swr';
 
 // --- Types for Data (Matched to API) ---
 interface DashboardData {
@@ -42,33 +45,22 @@ interface DashboardData {
 
 export default function DashboardPage() {
     const { formatDateTime } = useSettings();
-    const [data, setData] = useState<DashboardData | null>(null);
-    const [loading, setLoading] = useState(true);
+    
+    // Use SWR for data fetching with auto-refresh
+    const { data, isLoading, isValidating } = useSWR<DashboardData>(
+        '/api/dashboard',
+        {
+            ...swrConfig,
+            refreshInterval: 30000, // Auto-refresh every 30 seconds
+        }
+    );
 
-    useEffect(() => {
-        const fetchDashboardData = async () => {
-            try {
-                const res = await fetch('/api/dashboard');
-                if (res.ok) {
-                    const json = await res.json();
-                    setData(json);
-                }
-            } catch (e) {
-                console.error("Failed to fetch dashboard data", e);
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchDashboardData();
-    }, []);
-
-    const stats = [
+    const stats = useMemo(() => [
         {
             label: "Total Reports",
             value: data?.stats?.totalReports ?? 0,
             change: "All Time",
             icon: Folder,
-            // Dark Green BG, Bright Neon Green Icon/Text
             iconBoxColor: "bg-[#1c2e26] text-[#34d399]"
         },
         {
@@ -76,7 +68,6 @@ export default function DashboardPage() {
             value: data?.stats?.unreadReports ?? 0,
             change: "Action Needed",
             icon: Activity,
-            // Dark Orange BG, Bright Neon Orange
             iconBoxColor: "bg-[#2e241d] text-[#fbbf24]"
         },
         {
@@ -84,7 +75,6 @@ export default function DashboardPage() {
             value: data?.stats?.reportsToday ?? 0,
             change: "Last 24h",
             icon: Activity,
-            // Dark Blue BG, Bright Neon Blue
             iconBoxColor: "bg-[#1d283a] text-[#60a5fa]"
         },
         {
@@ -92,13 +82,12 @@ export default function DashboardPage() {
             value: data?.stats?.reportsThisWeek ?? 0,
             change: "Last 7 Days",
             icon: Users,
-            // Dark Purple BG, Bright Neon Purple
             iconBoxColor: "bg-[#251e36] text-[#a78bfa]"
         }
-    ];
+    ], [data?.stats]);
 
-    // Get last 7 days of data from API
-    const getChartData = () => {
+    // Get last 7 days of data from API - memoized
+    const chartData = useMemo(() => {
         const reportsPerDay = data?.charts?.reportsPerDay || [];
         const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
         
@@ -151,12 +140,18 @@ export default function DashboardPage() {
         if (maxCount === 0) maxCount = 1;
         
         return { points, maxCount };
-    };
-
-    const chartData = getChartData();
+    }, [data?.charts?.reportsPerDay]);
 
     return (
         <div className="space-y-5 pb-8">
+            {/* Refresh indicator */}
+            {isValidating && !isLoading && (
+                <div className="fixed top-4 right-4 z-50 bg-[#18181c] border border-[#27272a] rounded-lg px-3 py-1.5 flex items-center gap-2 text-xs text-muted-foreground">
+                    <RefreshCw className="h-3 w-3 animate-spin" />
+                    Refreshing...
+                </div>
+            )}
+            
             {/* Top Stats Row */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 {stats.map((stat, i) => {
@@ -167,7 +162,7 @@ export default function DashboardPage() {
                             <div className="flex justify-between items-start z-10">
                                 <div>
                                     <p className="text-muted-foreground text-xs font-medium mb-1">{stat.label}</p>
-                                    <h3 className="text-2xl font-bold text-white">{loading ? '-' : stat.value}</h3>
+                        <h3 className="text-2xl font-bold text-white">{isLoading ? '-' : stat.value}</h3>
                                 </div>
                                 <div className={cn("h-8 w-8 rounded-lg flex items-center justify-center", stat.iconBoxColor)}>
                                     <Icon className="h-4 w-4" />

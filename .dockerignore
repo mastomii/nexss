@@ -13,6 +13,8 @@ node_modules
 out
 dist
 build
+build.log
+error.log
 
 # Testing
 coverage

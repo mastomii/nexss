@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { Pool } from 'pg';
-import { isDatabaseUrlConfigured, checkDatabaseHealth, getExpectedSchema } from '@/lib/db-health';
+import { isDatabaseUrlConfigured, checkDatabaseHealth } from '@/lib/db-health';
 
 export const dynamic = 'force-dynamic';
 
@@ -119,8 +119,11 @@ CREATE TABLE IF NOT EXISTS intercepted_traffic (
     captured_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Individual indexes for general queries
 CREATE INDEX IF NOT EXISTS idx_intercepted_traffic_report_id ON intercepted_traffic(report_id);
 CREATE INDEX IF NOT EXISTS idx_intercepted_traffic_captured_at ON intercepted_traffic(captured_at);
+-- Composite index for efficient pagination queries: WHERE report_id = ? ORDER BY captured_at
+CREATE INDEX IF NOT EXISTS idx_intercepted_traffic_report_captured ON intercepted_traffic(report_id, captured_at DESC);
 
 -- Update trigger function
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -243,6 +246,29 @@ const COLUMN_DEFINITIONS: Record<string, Record<string, string>> = {
     },
 };
 
+// Index definitions for creating missing indexes
+const INDEX_DEFINITIONS: Record<string, string> = {
+    // User sessions indexes
+    idx_user_sessions_token: 'CREATE INDEX IF NOT EXISTS idx_user_sessions_token ON user_sessions(token)',
+    idx_user_sessions_user_id: 'CREATE INDEX IF NOT EXISTS idx_user_sessions_user_id ON user_sessions(user_id)',
+    // Reports indexes
+    idx_reports_archived: 'CREATE INDEX IF NOT EXISTS idx_reports_archived ON reports(archived)',
+    idx_reports_triggered_at: 'CREATE INDEX IF NOT EXISTS idx_reports_triggered_at ON reports(triggered_at)',
+    // Reports data indexes
+    idx_reports_data_report_id: 'CREATE INDEX IF NOT EXISTS idx_reports_data_report_id ON reports_data(report_id)',
+    // Logs indexes
+    idx_logs_user_id: 'CREATE INDEX IF NOT EXISTS idx_logs_user_id ON logs(user_id)',
+    idx_logs_created_at: 'CREATE INDEX IF NOT EXISTS idx_logs_created_at ON logs(created_at)',
+    // Persistent sessions indexes
+    idx_persistent_sessions_report_id: 'CREATE INDEX IF NOT EXISTS idx_persistent_sessions_report_id ON persistent_sessions(report_id)',
+    idx_persistent_sessions_last_seen: 'CREATE INDEX IF NOT EXISTS idx_persistent_sessions_last_seen ON persistent_sessions(last_seen)',
+    idx_persistent_sessions_last_response_at: 'CREATE INDEX IF NOT EXISTS idx_persistent_sessions_last_response_at ON persistent_sessions(last_response_at)',
+    // Intercepted traffic indexes
+    idx_intercepted_traffic_report_id: 'CREATE INDEX IF NOT EXISTS idx_intercepted_traffic_report_id ON intercepted_traffic(report_id)',
+    idx_intercepted_traffic_captured_at: 'CREATE INDEX IF NOT EXISTS idx_intercepted_traffic_captured_at ON intercepted_traffic(captured_at)',
+    idx_intercepted_traffic_report_captured: 'CREATE INDEX IF NOT EXISTS idx_intercepted_traffic_report_captured ON intercepted_traffic(report_id, captured_at DESC)',
+};
+
 export async function POST() {
     // Check if DATABASE_URL is configured
     if (!isDatabaseUrlConfigured()) {
@@ -335,6 +361,21 @@ export async function POST() {
                             await client.query(`ALTER TABLE ${mismatch.table} ALTER COLUMN ${mismatch.column} TYPE ${targetType} USING ${mismatch.column}::${targetType}`);
                         } catch (err) {
                             console.error(`[Sync] Failed to convert ${mismatch.table}.${mismatch.column} from ${mismatch.actual} to ${targetType}:`, err);
+                        }
+                    }
+                }
+            }
+
+            // Create missing indexes if any
+            if (health.details?.missingIndexes && health.details.missingIndexes.length > 0) {
+                for (const indexName of health.details.missingIndexes) {
+                    const indexDef = INDEX_DEFINITIONS[indexName];
+                    if (indexDef) {
+                        try {
+                            await client.query(indexDef);
+                            console.log(`[Sync] Created index: ${indexName}`);
+                        } catch (err) {
+                            console.error(`[Sync] Failed to create index ${indexName}:`, err);
                         }
                     }
                 }
