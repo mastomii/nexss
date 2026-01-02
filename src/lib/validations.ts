@@ -88,12 +88,18 @@ export const callbackDataSchema = z.object({
 // PERSIST SCHEMAS (Persistent Sessions)
 // ============================================
 
+// Status enum with empty string handling
+const persistStatusSchema = z.union([
+    z.enum(['active', 'popup_blocked', 'popup_opened', 'terminated', 'popup_error']),
+    z.literal('').transform(() => undefined), // Empty string becomes undefined
+]).optional().nullable();
+
 export const persistRequestSchema = z.object({
     rid: ulidSchema,
-    response: z.string().max(100000).optional(),
-    encrypted: z.boolean().optional(),
-    nocrypto: z.boolean().optional(),
-    status: z.enum(['active', 'popup_blocked', 'popup_opened', 'terminated', 'popup_error']).optional(),
+    response: z.string().max(100000).optional().nullable(),
+    encrypted: z.boolean().optional().nullable(),
+    nocrypto: z.boolean().optional().nullable(),
+    status: persistStatusSchema,
 });
 
 export const persistCommandSchema = z.object({
@@ -106,17 +112,17 @@ export const persistCommandSchema = z.object({
 
 export const trafficDataSchema = z.object({
     rid: ulidSchema,
-    type: z.enum(['fetch', 'xhr', 'form', 'navigation']).optional(),
-    method: z.string().max(10).optional(),
-    url: z.string().max(4000).optional(),
-    reqHeaders: z.string().max(50000).optional(),
-    reqBody: z.string().max(100000).optional(),
-    resHeaders: z.string().max(50000).optional(),
-    resBody: z.string().max(100000).optional(),
+    type: z.enum(['fetch', 'xhr', 'form', 'navigation']).optional().nullable(),
+    method: z.string().max(10).optional().nullable(),
+    url: z.string().max(4000).optional().nullable(),
+    reqHeaders: z.string().max(50000).optional().nullable(),
+    reqBody: z.string().max(100000).optional().nullable(),
+    resHeaders: z.string().max(50000).optional().nullable(),
+    resBody: z.string().max(100000).optional().nullable(),
     status: z.number().int().min(0).max(999).nullable().optional(),
     // Support encrypted traffic
     encrypted: z.boolean().optional(),
-    data: z.string().max(500000).optional(), // Encrypted payload
+    data: z.string().max(500000).optional().nullable(), // Encrypted payload
 });
 
 // ============================================

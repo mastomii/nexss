@@ -119,7 +119,7 @@ export async function POST(request: Request) {
             }
             
             // If response is provided, store it (decrypt if encrypted)
-            if (response !== undefined) {
+            if (response !== undefined && response !== null) {
                 let plainResponse = response;
                 
                 // Decrypt response if it was encrypted and we have a key
