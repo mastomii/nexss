@@ -212,22 +212,37 @@ export async function POST(request: NextRequest) {
                 console.log(`[NeXSS] Screenshot processed: ${Math.round(processed.metadata.originalSize / 1024)}KB -> ${Math.round(processed.metadata.optimizedSize / 1024)}KB (thumb: ${Math.round(processed.metadata.thumbnailSize / 1024)}KB)`);
             } catch (err) {
                 console.error('[NeXSS] Failed to save screenshot:', err);
-                // Fallback: try local storage with original buffer
-                try {
-                    const buffer = base64ToBuffer(screenshot);
-                    const fileName = `${reportId}.png`;
-                    const screenshotsDir = join(process.cwd(), 'data', 'screenshots');
-                    if (!existsSync(screenshotsDir)) {
-                        await mkdir(screenshotsDir, { recursive: true });
-                    }
-                    await writeFile(join(screenshotsDir, fileName), buffer);
-                    screenshotPath = `/screenshots/${fileName}`;
-                    screenshotStorage = 'local';
-                    screenshotBuffer = buffer;
-                } catch (localErr) {
-                    console.error('[NeXSS] Local fallback also failed:', localErr);
+                
+                // Check if we're in a serverless environment (read-only filesystem)
+                const isServerless = process.cwd().startsWith('/var/task') || 
+                                     process.env.AWS_LAMBDA_FUNCTION_NAME || 
+                                     process.env.VERCEL;
+                
+                if (isServerless) {
+                    // In serverless: cannot use local filesystem, need Object Storage (S3)
+                    console.warn('[NeXSS] Screenshot skipped: Configure Object Storage (S3/R2/MinIO) in Settings for serverless environments');
                     screenshotPath = null;
                     screenshotStorage = null;
+                    // Set screenshot_error so user knows why screenshot is missing
+                    data.screenshot_error = 'Serverless environment detected (Vercel/Lambda). Local filesystem is read-only. Please configure Object Storage (S3/R2/MinIO) in Settings > Storage to save screenshots.';
+                } else {
+                    // Not serverless: try local storage with original buffer
+                    try {
+                        const buffer = base64ToBuffer(screenshot);
+                        const fileName = `${reportId}.png`;
+                        const screenshotsDir = join(process.cwd(), 'data', 'screenshots');
+                        if (!existsSync(screenshotsDir)) {
+                            await mkdir(screenshotsDir, { recursive: true });
+                        }
+                        await writeFile(join(screenshotsDir, fileName), buffer);
+                        screenshotPath = `/screenshots/${fileName}`;
+                        screenshotStorage = 'local';
+                        screenshotBuffer = buffer;
+                    } catch (localErr) {
+                        console.error('[NeXSS] Local fallback also failed:', localErr);
+                        screenshotPath = null;
+                        screenshotStorage = null;
+                    }
                 }
             }
         }
