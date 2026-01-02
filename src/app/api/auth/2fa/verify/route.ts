@@ -4,6 +4,7 @@ import { query, queryOne, User, generateId } from '@/lib/db';
 import { getClientIP } from '@/lib/utils';
 import { verifyToken, decryptSecret, verifyBackupCode } from '@/lib/totp';
 import { checkRateLimit, rateLimitExceededResponse } from '@/lib/rate-limit';
+import { addCSRFToLoginResponse } from '@/lib/csrf';
 
 interface User2FA extends User {
     totp_secret: string | null;
@@ -127,6 +128,9 @@ export async function POST(request: NextRequest) {
             maxAge: 7 * 24 * 60 * 60, // 7 days
             path: '/',
         });
+
+        // Set CSRF token cookie
+        addCSRFToLoginResponse(response);
 
         return response;
     } catch (error) {
