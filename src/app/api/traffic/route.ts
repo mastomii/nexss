@@ -120,6 +120,24 @@ export async function POST(request: Request) {
                     );
                 }
             }
+        } else if (!encrypted && data) {
+            // Handle unencrypted JSON payload in data field (fallback when crypto.subtle unavailable)
+            try {
+                const parsed = JSON.parse(data);
+                type = parsed.type;
+                method = parsed.method;
+                url = parsed.url;
+                reqHeaders = parsed.reqHeaders;
+                reqBody = parsed.reqBody;
+                resHeaders = parsed.resHeaders;
+                resBody = parsed.resBody;
+                status = parsed.status;
+            } catch {
+                return NextResponse.json(
+                    { error: 'Invalid data payload' },
+                    { status: 400, headers: corsHeaders }
+                );
+            }
         }
 
         if (!rid || !type) {
