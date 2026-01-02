@@ -245,7 +245,27 @@ export function validatePassword(
 }
 
 /**
- * Generate a secure random password
+ * Generate a cryptographically secure random integer
+ */
+function secureRandomInt(max: number): number {
+  const crypto = require('crypto');
+  return crypto.randomInt(max);
+}
+
+/**
+ * Fisher-Yates shuffle using cryptographically secure random
+ */
+function secureShuffleString(str: string): string {
+  const arr = str.split('');
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = secureRandomInt(i + 1);
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr.join('');
+}
+
+/**
+ * Generate a secure random password using crypto.randomInt()
  */
 export function generateSecurePassword(length: number = 16): string {
   const uppercase = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
@@ -257,22 +277,19 @@ export function generateSecurePassword(length: number = 16): string {
   
   let password = '';
   
-  // Ensure at least one of each type
-  password += uppercase[Math.floor(Math.random() * uppercase.length)];
-  password += lowercase[Math.floor(Math.random() * lowercase.length)];
-  password += numbers[Math.floor(Math.random() * numbers.length)];
-  password += symbols[Math.floor(Math.random() * symbols.length)];
+  // Ensure at least one of each type using secure random
+  password += uppercase[secureRandomInt(uppercase.length)];
+  password += lowercase[secureRandomInt(lowercase.length)];
+  password += numbers[secureRandomInt(numbers.length)];
+  password += symbols[secureRandomInt(symbols.length)];
   
   // Fill rest with random chars
   for (let i = 4; i < length; i++) {
-    password += allChars[Math.floor(Math.random() * allChars.length)];
+    password += allChars[secureRandomInt(allChars.length)];
   }
   
-  // Shuffle the password
-  return password
-    .split('')
-    .sort(() => Math.random() - 0.5)
-    .join('');
+  // Shuffle the password using secure shuffle
+  return secureShuffleString(password);
 }
 
 /**

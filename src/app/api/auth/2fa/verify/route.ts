@@ -3,6 +3,7 @@ import { createToken, logAction } from '@/lib/auth';
 import { query, queryOne, User, generateId } from '@/lib/db';
 import { getClientIP } from '@/lib/utils';
 import { verifyToken, decryptSecret, verifyBackupCode } from '@/lib/totp';
+import { checkRateLimit, rateLimitExceededResponse } from '@/lib/rate-limit';
 
 interface User2FA extends User {
     totp_secret: string | null;
@@ -23,6 +24,13 @@ export async function POST(request: NextRequest) {
                 { error: 'User ID and token are required' },
                 { status: 400 }
             );
+        }
+
+        // Rate limit per userId to prevent brute-force on 6-digit TOTP codes
+        // Use strict limit: 5 attempts per 5 minutes per user
+        const rateLimitResult = checkRateLimit(`2fa:${userId}`, 'default');
+        if (!rateLimitResult.allowed) {
+            return rateLimitExceededResponse(rateLimitResult);
         }
 
         // Get user with 2FA data

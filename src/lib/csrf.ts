@@ -86,10 +86,11 @@ export function requiresCSRFValidation(method: string): boolean {
 
 /**
  * Paths that should skip CSRF validation (public endpoints)
+ * Note: /api/persist is only exempt for POST (XSS payload), 
+ * PUT requires auth and CSRF validation is handled in the route
  */
 const CSRF_EXEMPT_PATHS = [
     '/api/callback',        // XSS callback - public, CORS-enabled
-    '/api/persist',         // Persistent session - public, CORS-enabled  
     '/api/traffic',         // Traffic interception - public, CORS-enabled
     '/api/auth/login',      // Login - no session yet
     '/api/auth/2fa/verify', // 2FA verification - part of login flow
@@ -97,10 +98,29 @@ const CSRF_EXEMPT_PATHS = [
 ];
 
 /**
+ * Method-specific exemptions for paths that have mixed public/private endpoints
+ */
+const CSRF_EXEMPT_METHODS: Record<string, string[]> = {
+    '/api/persist': ['POST', 'OPTIONS'], // POST is public XSS polling, PUT/GET require auth
+};
+
+/**
  * Check if path is exempt from CSRF validation
  */
-export function isCSRFExempt(pathname: string): boolean {
-    return CSRF_EXEMPT_PATHS.some(path => pathname.startsWith(path));
+export function isCSRFExempt(pathname: string, method?: string): boolean {
+    // Check fully exempt paths first
+    if (CSRF_EXEMPT_PATHS.some(path => pathname.startsWith(path))) {
+        return true;
+    }
+    
+    // Check method-specific exemptions
+    for (const [path, methods] of Object.entries(CSRF_EXEMPT_METHODS)) {
+        if (pathname.startsWith(path) && method && methods.includes(method.toUpperCase())) {
+            return true;
+        }
+    }
+    
+    return false;
 }
 
 /**
@@ -108,8 +128,8 @@ export function isCSRFExempt(pathname: string): boolean {
  * Returns error response if CSRF validation fails, null if valid
  */
 export function validateCSRF(request: NextRequest, body?: Record<string, unknown>): NextResponse | null {
-    // Skip for exempt paths
-    if (isCSRFExempt(request.nextUrl.pathname)) {
+    // Skip for exempt paths/methods
+    if (isCSRFExempt(request.nextUrl.pathname, request.method)) {
         return null;
     }
     

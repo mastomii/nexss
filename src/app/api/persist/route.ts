@@ -4,6 +4,7 @@ import { getSession } from '@/lib/auth';
 import { corsHeaders } from '@/lib/cors';
 import { checkRateLimit, getClientIPFromRequest, rateLimitExceededResponse } from '@/lib/rate-limit';
 import { persistRequestSchema, safeValidate } from '@/lib/validations';
+import { validateCSRF } from '@/lib/csrf';
 import crypto from 'crypto';
 
 interface PersistSession {
@@ -176,7 +177,7 @@ export async function POST(request: Request) {
 }
 
 // PUT - Send command to a session via report_id
-export async function PUT(request: Request) {
+export async function PUT(request: NextRequest) {
     try {
         // Auth check - only authenticated users can send commands
         const authSession = await getSession();
@@ -185,6 +186,11 @@ export async function PUT(request: Request) {
         }
 
         const body = await request.json();
+        
+        // CSRF validation for authenticated state-changing request
+        const csrfError = validateCSRF(request, body);
+        if (csrfError) return csrfError;
+        
         const { report_id, command } = body;
 
         if (!report_id || !command) {

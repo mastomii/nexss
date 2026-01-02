@@ -16,17 +16,39 @@ interface RateLimitEntry {
 // In production, consider Redis for distributed rate limiting
 const rateLimitStore = new Map<string, RateLimitEntry>();
 
-// Cleanup old entries periodically
+// Cleanup configuration
 const CLEANUP_INTERVAL = 60000; // 1 minute
+const MAX_ENTRIES = 10000; // Maximum entries to prevent memory exhaustion
 let lastCleanup = Date.now();
 
-function cleanupOldEntries() {
+/**
+ * Cleanup old entries to prevent memory leaks
+ * @param force - Force cleanup regardless of interval
+ */
+function cleanupOldEntries(force: boolean = false) {
     const now = Date.now();
-    if (now - lastCleanup < CLEANUP_INTERVAL) return;
+    
+    // Force cleanup if over max entries
+    if (rateLimitStore.size > MAX_ENTRIES) {
+        force = true;
+    }
+    
+    if (!force && now - lastCleanup < CLEANUP_INTERVAL) return;
     
     lastCleanup = now;
     for (const [key, entry] of rateLimitStore.entries()) {
         if (entry.resetTime < now) {
+            rateLimitStore.delete(key);
+        }
+    }
+    
+    // If still over limit after expired cleanup, remove oldest entries
+    if (rateLimitStore.size > MAX_ENTRIES) {
+        const entries = Array.from(rateLimitStore.entries())
+            .sort((a, b) => a[1].resetTime - b[1].resetTime);
+        
+        const toRemove = entries.slice(0, rateLimitStore.size - MAX_ENTRIES + 1000);
+        for (const [key] of toRemove) {
             rateLimitStore.delete(key);
         }
     }

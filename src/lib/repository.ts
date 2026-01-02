@@ -33,6 +33,14 @@ export interface PaginatedResult<T> {
   totalPages: number;
 }
 
+// Allowed columns for sorting to prevent SQL injection
+const ALLOWED_SORT_COLUMNS: Record<string, string[]> = {
+  reports: ['id', 'created_at', 'updated_at', 'timestamp', 'url', 'ip_address', 'status'],
+  users: ['id', 'created_at', 'updated_at', 'username', 'last_login'],
+  settings: ['key', 'created_at', 'updated_at'],
+  traffic: ['id', 'created_at', 'timestamp', 'path', 'method', 'status_code'],
+};
+
 /**
  * Base repository with common CRUD operations
  */
@@ -43,6 +51,21 @@ export abstract class BaseRepository<T extends BaseEntity> {
   constructor(tableName: string, primaryKey: string = 'id') {
     this.tableName = tableName;
     this.primaryKey = primaryKey;
+  }
+
+  /**
+   * Validate and sanitize sort column to prevent SQL injection
+   */
+  protected getSafeSortColumn(column: string): string {
+    const allowedColumns = ALLOWED_SORT_COLUMNS[this.tableName] || [this.primaryKey];
+    return allowedColumns.includes(column) ? column : this.primaryKey;
+  }
+
+  /**
+   * Validate sort order
+   */
+  protected getSafeSortOrder(order: string): 'ASC' | 'DESC' {
+    return order.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
   }
 
   /**
@@ -62,6 +85,10 @@ export abstract class BaseRepository<T extends BaseEntity> {
   async findAll(options: PaginationOptions = {}): Promise<PaginatedResult<T>> {
     const { page = 1, limit = 50, sortBy = this.primaryKey, sortOrder = 'DESC' } = options;
     const offset = (page - 1) * limit;
+    
+    // Sanitize sort parameters to prevent SQL injection
+    const safeSortBy = this.getSafeSortColumn(sortBy);
+    const safeSortOrder = this.getSafeSortOrder(sortOrder);
 
     // Get total count
     const countResult = await pool.query(`SELECT COUNT(*) FROM ${this.tableName}`);
@@ -69,7 +96,7 @@ export abstract class BaseRepository<T extends BaseEntity> {
 
     // Get paginated data
     const result = await pool.query<T>(
-      `SELECT * FROM ${this.tableName} ORDER BY ${sortBy} ${sortOrder} LIMIT $1 OFFSET $2`,
+      `SELECT * FROM ${this.tableName} ORDER BY ${safeSortBy} ${safeSortOrder} LIMIT $1 OFFSET $2`,
       [limit, offset]
     );
 
@@ -90,13 +117,26 @@ export abstract class BaseRepository<T extends BaseEntity> {
     const keys = Object.keys(conditions);
     const values = Object.values(conditions);
     
-    const whereClause = keys.map((key, i) => `${key} = $${i + 1}`).join(' AND ');
+    // Sanitize sort parameters to prevent SQL injection
+    const safeSortBy = this.getSafeSortColumn(sortBy);
+    const safeSortOrder = this.getSafeSortOrder(sortOrder);
     
-    let query = `SELECT * FROM ${this.tableName} WHERE ${whereClause} ORDER BY ${sortBy} ${sortOrder}`;
+    // Validate condition keys are alphanumeric (prevent injection via keys)
+    const safeKeys = keys.filter(k => /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(k));
+    if (safeKeys.length !== keys.length) {
+      throw new Error('Invalid column name in conditions');
+    }
+    
+    const whereClause = safeKeys.map((key, i) => `${key} = $${i + 1}`).join(' AND ');
+    
+    let query = `SELECT * FROM ${this.tableName} WHERE ${whereClause} ORDER BY ${safeSortBy} ${safeSortOrder}`;
     
     if (limit) {
       const offset = (page - 1) * limit;
-      query += ` LIMIT ${limit} OFFSET ${offset}`;
+      const limitParamIndex = values.length + 1;
+      const offsetParamIndex = values.length + 2;
+      query += ` LIMIT $${limitParamIndex} OFFSET $${offsetParamIndex}`;
+      values.push(limit as unknown, offset as unknown);
     }
 
     const result = await pool.query<T>(query, values);
@@ -568,6 +608,9 @@ class TrafficRepository extends BaseRepository<Traffic> {
     byPath: Record<string, number>;
     byDay: Array<{ date: string; count: number }>;
   }> {
+    // Sanitize days parameter - ensure it's a positive integer
+    const safeDays = Math.max(1, Math.min(365, Math.floor(Number(days) || 7)));
+    
     const statsResult = await this.query<{
       total: string;
       unique_ips: string;
@@ -578,20 +621,22 @@ class TrafficRepository extends BaseRepository<Traffic> {
         COUNT(DISTINCT ip_address) as unique_ips,
         AVG(response_time) as avg_response
       FROM traffic
-      WHERE timestamp >= CURRENT_DATE - INTERVAL '${days} days'
-    `);
+      WHERE timestamp >= CURRENT_DATE - $1 * INTERVAL '1 day'
+    `, [safeDays]);
 
     const pathResult = await this.query<{ path: string; count: string }>(
       `SELECT path, COUNT(*) FROM traffic 
-       WHERE timestamp >= CURRENT_DATE - INTERVAL '${days} days'
-       GROUP BY path ORDER BY COUNT(*) DESC LIMIT 10`
+       WHERE timestamp >= CURRENT_DATE - $1 * INTERVAL '1 day'
+       GROUP BY path ORDER BY COUNT(*) DESC LIMIT 10`,
+      [safeDays]
     );
 
     const dailyResult = await this.query<{ date: string; count: string }>(
       `SELECT DATE(timestamp) as date, COUNT(*) 
        FROM traffic 
-       WHERE timestamp >= CURRENT_DATE - INTERVAL '${days} days'
-       GROUP BY DATE(timestamp) ORDER BY date`
+       WHERE timestamp >= CURRENT_DATE - $1 * INTERVAL '1 day'
+       GROUP BY DATE(timestamp) ORDER BY date`,
+      [safeDays]
     );
 
     const byPath: Record<string, number> = {};

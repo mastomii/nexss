@@ -316,22 +316,22 @@ export async function revokeAllSessions(
     currentToken?: string
 ): Promise<ServiceResult<{ revoked: number }>> {
     return safeExecute('UserService', 'revokeAllSessions', async () => {
-        let result;
+        let deletedCount = 0;
         
         if (currentToken) {
-            result = await query(
-                'DELETE FROM user_sessions WHERE user_id = $1 AND token != $2',
+            // Use RETURNING to count deleted rows accurately
+            const result = await query<{ id: string }>(
+                'DELETE FROM user_sessions WHERE user_id = $1 AND token != $2 RETURNING id',
                 [userId, currentToken]
             );
+            deletedCount = result.length;
         } else {
-            result = await query(
-                'DELETE FROM user_sessions WHERE user_id = $1',
+            const result = await query<{ id: string }>(
+                'DELETE FROM user_sessions WHERE user_id = $1 RETURNING id',
                 [userId]
             );
+            deletedCount = result.length;
         }
-
-        // PostgreSQL returns rowCount from the query
-        const deletedCount = (result as unknown as { length: number }).length || 0;
         
         logger.info('All sessions revoked', { userId, count: deletedCount });
         return success({ revoked: deletedCount });
