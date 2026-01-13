@@ -81,6 +81,7 @@ export interface Report {
   referer: string | null;
   user_agent: string | null;
   ip: string | null;
+  ip_info: string | null; // JSON from ipinfo.io
   triggered_at: Date;
   archived: boolean;
   read: boolean;

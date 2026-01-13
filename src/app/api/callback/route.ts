@@ -23,6 +23,7 @@ interface CallbackData {
     sessionstorage?: string;
     'user-agent'?: string;
     ip?: string;
+    ip_info?: string;
     extra?: Record<string, unknown>;
 }
 
@@ -123,8 +124,8 @@ export async function POST(request: NextRequest) {
 
         // Create report
         await query(
-            `INSERT INTO reports (id, uri, origin, referer, user_agent, ip, cookies)
-             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+            `INSERT INTO reports (id, uri, origin, referer, user_agent, ip, ip_info, cookies)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
             [
                 reportId,
                 data.uri?.substring(0, 2000) || null,
@@ -132,6 +133,7 @@ export async function POST(request: NextRequest) {
                 data.referer?.substring(0, 2000) || null,
                 userAgent.substring(0, 1000) || null,
                 reportIP.substring(0, 100) || null,
+                data.ip_info || null,
                 data.cookies || null,
             ]
         );

@@ -69,6 +69,7 @@ const EXPECTED_SCHEMA: TableSchema[] = [
             { name: 'referer', type: 'character varying' },
             { name: 'user_agent', type: 'character varying' },
             { name: 'ip', type: 'character varying' },
+            { name: 'ip_info', type: 'text' },
             { name: 'cookies', type: 'text' },
             { name: 'triggered_at', type: 'timestamp with time zone' },
             { name: 'archived', type: 'boolean' },

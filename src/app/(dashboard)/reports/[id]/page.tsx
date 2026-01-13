@@ -42,7 +42,9 @@ import {
     ChevronsUp,
     Ban,
     AlertTriangle,
-    Network
+    Network,
+    Info,
+    X
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSettings } from '@/lib/settings-context';
@@ -68,9 +70,21 @@ interface FullReport {
     referer: string | null;
     user_agent: string | null;
     ip: string | null;
+    ip_info: string | null;
     triggered_at: string;
     cookies: string | null;
     data?: ReportData | null;
+}
+
+interface IpInfo {
+    ip?: string;
+    city?: string;
+    region?: string;
+    country?: string;
+    loc?: string;
+    org?: string;
+    postal?: string;
+    timezone?: string;
 }
 
 interface SessionStatus {
@@ -133,6 +147,9 @@ export default function ReportDetailPage() {
     const [expandedTraffic, setExpandedTraffic] = useState<Set<string>>(new Set());
     const [trafficPage, setTrafficPage] = useState(1);
     const trafficPerPage = 20;
+    
+    // IP Info modal state
+    const [showIpInfo, setShowIpInfo] = useState(false);
 
     // Enumeration state
     const [enumData, setEnumData] = useState<EnumerationResult[]>([]);
@@ -468,6 +485,26 @@ export default function ReportDetailPage() {
         { name: 'Redirect', cmd: 'location.href="https://example.com"' },
     ];
 
+    // Parse IP info from JSON string
+    const parsedIpInfo: IpInfo | null = useMemo(() => {
+        if (!report?.ip_info) return null;
+        try {
+            return JSON.parse(report.ip_info) as IpInfo;
+        } catch {
+            return null;
+        }
+    }, [report?.ip_info]);
+
+    // Get country flag emoji from country code (e.g., "ID" -> 🇮🇩)
+    const getCountryFlag = (countryCode: string | undefined): string => {
+        if (!countryCode || countryCode.length !== 2) return '';
+        const offset = 127397; // Unicode regional indicator offset
+        return String.fromCodePoint(
+            countryCode.toUpperCase().charCodeAt(0) + offset,
+            countryCode.toUpperCase().charCodeAt(1) + offset
+        );
+    };
+
     // Helper to get screenshot URL - all requests go through API for security
     const getScreenshotUrl = (screenshot: string, storage: string | null): string => {
         // If data URL, use directly
@@ -595,6 +632,9 @@ export default function ReportDetailPage() {
                     <div className="divide-y divide-[#27272a]">
                         {detailItems.map((item) => {
                             const Icon = item.icon;
+                            const isIpAddress = item.label === 'IP Address';
+                            const countryFlag = isIpAddress && parsedIpInfo?.country ? getCountryFlag(parsedIpInfo.country) : '';
+                            
                             return (
                                 <div key={item.label} className="px-4 py-2.5 flex items-start gap-3">
                                     <div className="p-1.5 rounded bg-[#27272a]">
@@ -602,20 +642,36 @@ export default function ReportDetailPage() {
                                     </div>
                                     <div className="flex-1 min-w-0">
                                         <p className="text-xs text-muted-foreground">{item.label}</p>
-                                        <p className="text-white text-xs mt-0.5 break-all truncate font-mono">{item.value || 'N/A'}</p>
-                                    </div>
-                                    {item.value && (
-                                        <button
-                                            onClick={() => copyToClipboard(item.value!, item.label)}
-                                            className="p-1.5 rounded hover:bg-[#27272a] text-muted-foreground hover:text-white transition-colors"
-                                        >
-                                            {copied === item.label ? (
-                                                <Check className="w-3.5 h-3.5 text-emerald-400" />
-                                            ) : (
-                                                <Copy className="w-3.5 h-3.5" />
+                                        <div className="flex items-center gap-2 mt-0.5">
+                                            {countryFlag && (
+                                                <span className="text-base" title={parsedIpInfo?.country}>{countryFlag}</span>
                                             )}
-                                        </button>
-                                    )}
+                                            <p className="text-white text-xs break-all truncate font-mono">{item.value || 'N/A'}</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                        {isIpAddress && parsedIpInfo && (
+                                            <button
+                                                onClick={() => setShowIpInfo(true)}
+                                                className="p-1.5 rounded hover:bg-[#27272a] text-muted-foreground hover:text-white transition-colors"
+                                                title="View IP Details"
+                                            >
+                                                <Info className="w-3.5 h-3.5" />
+                                            </button>
+                                        )}
+                                        {item.value && (
+                                            <button
+                                                onClick={() => copyToClipboard(item.value!, item.label)}
+                                                className="p-1.5 rounded hover:bg-[#27272a] text-muted-foreground hover:text-white transition-colors"
+                                            >
+                                                {copied === item.label ? (
+                                                    <Check className="w-3.5 h-3.5 text-emerald-400" />
+                                                ) : (
+                                                    <Copy className="w-3.5 h-3.5" />
+                                                )}
+                                            </button>
+                                        )}
+                                    </div>
                                 </div>
                             );
                         })}
@@ -1488,6 +1544,84 @@ export default function ReportDetailPage() {
                         )}
                     </div>
                 </>
+            )}
+
+            {/* IP Info Modal */}
+            {showIpInfo && parsedIpInfo && (
+                <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setShowIpInfo(false)}>
+                    <div 
+                        className="bg-[#18181c] border border-[#27272a] rounded-lg w-full max-w-md mx-4 overflow-hidden animate-in zoom-in-95"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="px-4 py-3 border-b border-[#27272a] flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <MapPin className="w-4 h-4 text-violet-400" />
+                                <h3 className="text-sm font-medium text-white">IP Address Details</h3>
+                            </div>
+                            <button
+                                onClick={() => setShowIpInfo(false)}
+                                className="p-1 rounded hover:bg-[#27272a] text-muted-foreground hover:text-white transition-colors"
+                            >
+                                <X className="w-4 h-4" />
+                            </button>
+                        </div>
+                        <div className="p-4 space-y-3">
+                            <div className="flex items-center gap-3 pb-3 border-b border-[#27272a]">
+                                <span className="text-4xl">{getCountryFlag(parsedIpInfo.country)}</span>
+                                <div>
+                                    <p className="text-lg font-mono text-white">{parsedIpInfo.ip || report?.ip}</p>
+                                    <p className="text-sm text-muted-foreground">
+                                        {[parsedIpInfo.city, parsedIpInfo.region, parsedIpInfo.country].filter(Boolean).join(', ')}
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3 text-sm">
+                                {parsedIpInfo.city && (
+                                    <div>
+                                        <p className="text-muted-foreground text-xs">City</p>
+                                        <p className="text-white">{parsedIpInfo.city}</p>
+                                    </div>
+                                )}
+                                {parsedIpInfo.region && (
+                                    <div>
+                                        <p className="text-muted-foreground text-xs">Region</p>
+                                        <p className="text-white">{parsedIpInfo.region}</p>
+                                    </div>
+                                )}
+                                {parsedIpInfo.country && (
+                                    <div>
+                                        <p className="text-muted-foreground text-xs">Country</p>
+                                        <p className="text-white">{parsedIpInfo.country}</p>
+                                    </div>
+                                )}
+                                {parsedIpInfo.postal && (
+                                    <div>
+                                        <p className="text-muted-foreground text-xs">Postal Code</p>
+                                        <p className="text-white">{parsedIpInfo.postal}</p>
+                                    </div>
+                                )}
+                                {parsedIpInfo.timezone && (
+                                    <div>
+                                        <p className="text-muted-foreground text-xs">Timezone</p>
+                                        <p className="text-white">{parsedIpInfo.timezone}</p>
+                                    </div>
+                                )}
+                                {parsedIpInfo.loc && (
+                                    <div>
+                                        <p className="text-muted-foreground text-xs">Location</p>
+                                        <p className="text-white font-mono text-xs">{parsedIpInfo.loc}</p>
+                                    </div>
+                                )}
+                            </div>
+                            {parsedIpInfo.org && (
+                                <div className="pt-3 border-t border-[#27272a]">
+                                    <p className="text-muted-foreground text-xs">Organization / ISP</p>
+                                    <p className="text-white text-sm mt-0.5">{parsedIpInfo.org}</p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
             )}
         </div>
     );

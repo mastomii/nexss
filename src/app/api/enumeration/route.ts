@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { validateCSRF } from '@/lib/csrf';
 import { pathEnumConfigSchema, safeValidate, ulidSchema } from '@/lib/validations';

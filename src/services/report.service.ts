@@ -156,6 +156,7 @@ export async function getReportById(id: string): Promise<ServiceResult<FullRepor
             referer: row.referer,
             user_agent: row.user_agent,
             ip: row.ip,
+            ip_info: row.ip_info,
             triggered_at: row.triggered_at,
             archived: row.archived,
             read: row.read,

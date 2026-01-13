@@ -52,6 +52,7 @@ CREATE TABLE reports (
     -- Browser info
     user_agent VARCHAR(1000),
     ip VARCHAR(100),
+    ip_info TEXT, -- JSON from ipinfo.io
     cookies TEXT,
     -- Timestamps
     triggered_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,

