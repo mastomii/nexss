@@ -36,6 +36,7 @@ const publicApiRoutes = [
     '/api/callback',
     '/api/persist',
     '/api/traffic',
+    '/api/enumeration',
     '/api/setup/health',
     '/api/setup/sync',
 ];
