@@ -41,13 +41,14 @@ import {
     ChevronsDown,
     ChevronsUp,
     Ban,
-    AlertTriangle
+    AlertTriangle,
+    Network
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSettings } from '@/lib/settings-context';
 import { Badge } from '@/components/ui/badge';
 
-type TabType = 'storage' | 'dom' | 'persist' | 'traffic';
+type TabType = 'storage' | 'dom' | 'persist' | 'traffic' | 'enumeration';
 
 interface ReportData {
     id: string;
@@ -98,6 +99,19 @@ interface TrafficItem {
     captured_at: string;
 }
 
+interface EnumerationResult {
+    id: string;
+    report_id: string;
+    path: string;
+    description: string | null;
+    status_code: number | null;
+    response_size: number | null;
+    response_body: string | null;
+    response_headers: string | null;
+    error_message: string | null;
+    fetched_at: string;
+}
+
 export default function ReportDetailPage() {
     const params = useParams();
     const router = useRouter();
@@ -119,6 +133,14 @@ export default function ReportDetailPage() {
     const [expandedTraffic, setExpandedTraffic] = useState<Set<string>>(new Set());
     const [trafficPage, setTrafficPage] = useState(1);
     const trafficPerPage = 20;
+
+    // Enumeration state
+    const [enumData, setEnumData] = useState<EnumerationResult[]>([]);
+    const [enumLoading, setEnumLoading] = useState(false);
+    const [expandedEnum, setExpandedEnum] = useState<Set<string>>(new Set());
+    const [enumBeautified, setEnumBeautified] = useState<Set<string>>(new Set());
+    const [enumShowFull, setEnumShowFull] = useState<Set<string>>(new Set());
+    const ENUM_PREVIEW_SIZE = 50000; // 50KB preview
 
     // Format seconds as human-readable relative time
     const formatRelativeTime = (seconds: number): string => {
@@ -160,6 +182,102 @@ export default function ReportDetailPage() {
         setExpandedTraffic(new Set());
     };
 
+    const toggleEnumExpand = (id: string) => {
+        setExpandedEnum(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) {
+                next.delete(id);
+            } else {
+                next.add(id);
+            }
+            return next;
+        });
+    };
+
+    const toggleEnumBeautify = (id: string) => {
+        setEnumBeautified(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) {
+                next.delete(id);
+            } else {
+                next.add(id);
+            }
+            return next;
+        });
+    };
+
+    const toggleEnumShowFull = (id: string) => {
+        setEnumShowFull(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) {
+                next.delete(id);
+            } else {
+                next.add(id);
+            }
+            return next;
+        });
+    };
+
+    // Beautify JSON
+    const beautifyJson = (str: string): string => {
+        try {
+            return JSON.stringify(JSON.parse(str), null, 2);
+        } catch {
+            return str;
+        }
+    };
+
+    // Detect content type and get syntax language
+    const detectLanguage = (content: string): string => {
+        const trimmed = content.trim();
+        if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+            try {
+                JSON.parse(trimmed);
+                return 'json';
+            } catch {
+                // Not valid JSON
+            }
+        }
+        if (trimmed.startsWith('<!DOCTYPE') || trimmed.startsWith('<html') || trimmed.startsWith('<')) {
+            return 'html';
+        }
+        return 'text';
+    };
+
+    // Process enum response body with beautify and truncation
+    const processEnumBody = (item: EnumerationResult): { content: string; isTruncated: boolean; language: string } => {
+        const body = item.response_body || '';
+        const isBeautified = enumBeautified.has(item.id);
+        const showFull = enumShowFull.has(item.id);
+        const language = detectLanguage(body);
+        
+        let processed = body;
+        
+        // Apply beautify first
+        if (isBeautified) {
+            if (language === 'json') {
+                processed = beautifyJson(body);
+            } else if (language === 'html') {
+                processed = beautifyHtml(body);
+            }
+        }
+        
+        // Then truncate if needed
+        const needsTruncation = processed.length > ENUM_PREVIEW_SIZE && !showFull;
+        if (needsTruncation) {
+            processed = processed.substring(0, ENUM_PREVIEW_SIZE);
+        }
+        
+        return { content: processed, isTruncated: needsTruncation, language };
+    };
+
+    // Format size for display
+    const formatSize = (size: number): string => {
+        if (size > 1000000) return `${(size / 1000000).toFixed(2)} MB`;
+        if (size > 1000) return `${(size / 1000).toFixed(1)} KB`;
+        return `${size} B`;
+    };
+
     // Paginated traffic data
     const paginatedTraffic = useMemo(() => {
         const start = (trafficPage - 1) * trafficPerPage;
@@ -198,6 +316,22 @@ export default function ReportDetailPage() {
         }
     }, [params.id]);
 
+    const fetchEnumData = useCallback(async () => {
+        if (!params.id) return;
+        try {
+            setEnumLoading(true);
+            const res = await fetch(`/api/reports/${params.id}/enumeration`);
+            if (res.ok) {
+                const data = await res.json();
+                setEnumData(data || []);
+            }
+        } catch (error) {
+            console.error('Failed to fetch enumeration data:', error);
+        } finally {
+            setEnumLoading(false);
+        }
+    }, [params.id]);
+
     useEffect(() => {
         const fetchReport = async () => {
             try {
@@ -215,7 +349,8 @@ export default function ReportDetailPage() {
         fetchReport();
         checkSessionStatus();
         fetchTrafficData();
-    }, [params.id, router, checkSessionStatus, fetchTrafficData]);
+        fetchEnumData();
+    }, [params.id, router, checkSessionStatus, fetchTrafficData, fetchEnumData]);
 
     // Separate effect for polling - properly handles cleanup and termination
     useEffect(() => {
@@ -382,6 +517,7 @@ export default function ReportDetailPage() {
     const tabs = [
         { id: 'storage' as TabType, label: 'Storage', icon: Database, show: !!(report.cookies || report.data?.localstorage || report.data?.sessionstorage) },
         { id: 'dom' as TabType, label: 'DOM', icon: FileCode, show: !!report.data?.dom },
+        { id: 'enumeration' as TabType, label: 'Enumeration', icon: Network, show: true, count: enumData.length },
         { id: 'persist' as TabType, label: 'Persistent Mode', icon: Terminal, show: true },
         { id: 'traffic' as TabType, label: 'Traffic', icon: Radio, show: true, count: trafficData.length },
     ].filter(t => t.show);
@@ -856,6 +992,254 @@ export default function ReportDetailPage() {
                                         )}
                                     </div>
                                 </div>
+                            </div>
+                        )}
+
+                        {/* Enumeration Tab */}
+                        {activeTab === 'enumeration' && (
+                            <div className="p-4 space-y-3">
+                                <div className="flex items-center justify-between mb-3">
+                                    <div className="flex items-center gap-2">
+                                        <Network className="w-4 h-4 text-violet-500" />
+                                        <h3 className="font-medium text-white text-sm">Path Enumeration Results</h3>
+                                        <Badge variant="secondary" className="h-5 px-1.5 text-xs bg-violet-500/10 text-violet-500 border-none">
+                                            {enumData.length} paths tested
+                                        </Badge>
+                                    </div>
+                                    {enumLoading && (
+                                        <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                                    )}
+                                </div>
+
+                                {enumData.length === 0 ? (
+                                    <div className="py-8 text-center text-muted-foreground text-sm">
+                                        <Network className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                                        <p>No enumeration results yet</p>
+                                        <p className="text-xs mt-1">Configure paths in Payload settings to enumerate endpoints</p>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-2">
+                                        {enumData.map((item) => {
+                                            const isExpanded = expandedEnum.has(item.id);
+                                            const hasContent = item.response_body || item.response_headers || item.error_message;
+                                            const isBeautified = enumBeautified.has(item.id);
+                                            const { content: processedBody, isTruncated, language } = item.response_body 
+                                                ? processEnumBody(item)
+                                                : { content: '', isTruncated: false, language: 'text' };
+                                            
+                                            return (
+                                                <div 
+                                                    key={item.id}
+                                                    className="rounded bg-[#09090b] border border-[#27272a] hover:border-[#3f3f46] transition-colors overflow-hidden"
+                                                >
+                                                    {/* Header */}
+                                                    <div 
+                                                        className={cn(
+                                                            "p-3 flex items-center gap-2 cursor-pointer select-none",
+                                                            hasContent && "hover:bg-[#18181c]"
+                                                        )}
+                                                        onClick={() => hasContent && toggleEnumExpand(item.id)}
+                                                    >
+                                                        {hasContent ? (
+                                                            isExpanded ? (
+                                                                <ChevronDown className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                                                            ) : (
+                                                                <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                                                            )
+                                                        ) : (
+                                                            <div className="w-4" />
+                                                        )}
+                                                        
+                                                        {item.status_code !== null ? (
+                                                            <Badge
+                                                                variant="secondary"
+                                                                className={cn(
+                                                                    "h-5 px-1.5 text-xs border-none flex-shrink-0",
+                                                                    item.status_code >= 200 && item.status_code < 300
+                                                                        ? 'bg-emerald-500/20 text-emerald-400'
+                                                                        : item.status_code >= 400
+                                                                            ? 'bg-red-500/20 text-red-400'
+                                                                            : 'bg-amber-500/20 text-amber-400'
+                                                                )}
+                                                            >
+                                                                {item.status_code}
+                                                            </Badge>
+                                                        ) : item.error_message ? (
+                                                            <Badge
+                                                                variant="secondary"
+                                                                className="h-5 px-1.5 text-xs border-none flex-shrink-0 bg-red-500/20 text-red-400"
+                                                            >
+                                                                Error
+                                                            </Badge>
+                                                        ) : (
+                                                            <div className="w-12" />
+                                                        )}
+                                                        
+                                                        {item.response_size !== null && (
+                                                            <span className="text-xs text-muted-foreground flex-shrink-0">
+                                                                {formatSize(item.response_size)}
+                                                            </span>
+                                                        )}
+                                                        
+                                                        <div className="flex-1 min-w-0">
+                                                            <span className="text-sm font-mono text-white truncate block">
+                                                                {item.path}
+                                                            </span>
+                                                            {item.description && (
+                                                                <span className="text-xs text-muted-foreground truncate block">
+                                                                    {item.description}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                copyToClipboard(item.response_body || item.error_message || '', `enum-${item.id}`);
+                                                            }}
+                                                            className="p-1.5 rounded hover:bg-[#27272a] text-muted-foreground hover:text-white transition-colors flex-shrink-0"
+                                                        >
+                                                            {copied === `enum-${item.id}` ? (
+                                                                <Check className="w-3.5 h-3.5 text-emerald-400" />
+                                                            ) : (
+                                                                <Copy className="w-3.5 h-3.5" />
+                                                            )}
+                                                        </button>
+                                                    </div>
+                                                    
+                                                    {/* Expanded Content */}
+                                                    {isExpanded && hasContent && (
+                                                        <div className="border-t border-[#27272a] p-3 space-y-3 bg-[#0c0c0e]">
+                                                            {item.error_message && (
+                                                                <div>
+                                                                    <span className="text-xs text-red-400 font-medium">Error</span>
+                                                                    <pre className="mt-1 text-xs text-red-400 font-mono bg-black/30 p-2 rounded">
+                                                                        {item.error_message}
+                                                                    </pre>
+                                                                </div>
+                                                            )}
+                                                            
+                                                            {item.response_headers && (
+                                                                <div>
+                                                                    <div className="flex items-center justify-between mb-1">
+                                                                        <span className="text-xs text-muted-foreground font-medium">Response Headers</span>
+                                                                        <button
+                                                                            onClick={() => copyToClipboard(item.response_headers || '', `enum-headers-${item.id}`)}
+                                                                            className="p-1 rounded hover:bg-[#27272a] text-muted-foreground hover:text-white transition-colors"
+                                                                        >
+                                                                            {copied === `enum-headers-${item.id}` ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                                                                        </button>
+                                                                    </div>
+                                                                    <pre className="text-xs text-cyan-400 font-mono bg-black/30 p-2 rounded overflow-x-auto whitespace-pre-wrap max-h-40 overflow-y-auto">
+                                                                        {item.response_headers}
+                                                                    </pre>
+                                                                </div>
+                                                            )}
+                                                            
+                                                            {item.response_body && (
+                                                                <div>
+                                                                    <div className="flex items-center justify-between mb-1">
+                                                                        <div className="flex items-center gap-2">
+                                                                            <span className="text-xs text-muted-foreground font-medium">Response Body</span>
+                                                                            <span className="text-xs px-1.5 py-0.5 rounded bg-violet-500/20 text-violet-400">
+                                                                                {formatSize(item.response_body.length)}
+                                                                            </span>
+                                                                            {language !== 'text' && (
+                                                                                <span className="text-xs px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-400 uppercase">
+                                                                                    {language}
+                                                                                </span>
+                                                                            )}
+                                                                            {isTruncated && (
+                                                                                <span className="text-xs px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400">
+                                                                                    Preview (50 KB)
+                                                                                </span>
+                                                                            )}
+                                                                        </div>
+                                                                        <div className="flex items-center gap-1">
+                                                                            {isTruncated && (
+                                                                                <button
+                                                                                    onClick={() => toggleEnumShowFull(item.id)}
+                                                                                    className="flex items-center gap-1 px-2 py-1 rounded text-xs bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 transition-colors"
+                                                                                >
+                                                                                    <FileCode className="w-3 h-3" />
+                                                                                    Load Full
+                                                                                </button>
+                                                                            )}
+                                                                            {enumShowFull.has(item.id) && item.response_body.length > ENUM_PREVIEW_SIZE && (
+                                                                                <button
+                                                                                    onClick={() => toggleEnumShowFull(item.id)}
+                                                                                    className="flex items-center gap-1 px-2 py-1 rounded text-xs bg-zinc-500/20 text-zinc-400 hover:bg-zinc-500/30 transition-colors"
+                                                                                >
+                                                                                    Show Preview
+                                                                                </button>
+                                                                            )}
+                                                                            {(language === 'json' || language === 'html') && (
+                                                                                <button
+                                                                                    onClick={() => toggleEnumBeautify(item.id)}
+                                                                                    className={cn(
+                                                                                        "flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors",
+                                                                                        isBeautified
+                                                                                            ? "bg-cyan-500/20 text-cyan-400"
+                                                                                            : "bg-[#27272a] text-muted-foreground hover:text-white"
+                                                                                    )}
+                                                                                >
+                                                                                    <Wand2 className="w-3 h-3" />
+                                                                                    Beautify
+                                                                                </button>
+                                                                            )}
+                                                                            <button
+                                                                                onClick={() => copyToClipboard(item.response_body || '', `enum-body-${item.id}`)}
+                                                                                className="p-1 rounded hover:bg-[#27272a] text-muted-foreground hover:text-white transition-colors"
+                                                                            >
+                                                                                {copied === `enum-body-${item.id}` ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                                                                            </button>
+                                                                        </div>
+                                                                    </div>
+                                                                    <div className="rounded overflow-hidden border border-[#27272a]">
+                                                                        <Suspense fallback={
+                                                                            <div className="p-4 bg-[#09090b] text-muted-foreground text-sm flex items-center justify-center">
+                                                                                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                                                                                Loading...
+                                                                            </div>
+                                                                        }>
+                                                                            <SyntaxHighlighter
+                                                                                language={language}
+                                                                                style={vscDarkPlus}
+                                                                                showLineNumbers
+                                                                                wrapLongLines
+                                                                                customStyle={{
+                                                                                    margin: 0,
+                                                                                    padding: '12px',
+                                                                                    fontSize: '12px',
+                                                                                    maxHeight: '400px',
+                                                                                    background: '#09090b',
+                                                                                }}
+                                                                                lineNumberStyle={{
+                                                                                    minWidth: '36px',
+                                                                                    paddingRight: '12px',
+                                                                                    color: '#525252',
+                                                                                    borderRight: '1px solid #27272a',
+                                                                                    marginRight: '12px',
+                                                                                }}
+                                                                            >
+                                                                                {processedBody}
+                                                                            </SyntaxHighlighter>
+                                                                        </Suspense>
+                                                                        {isTruncated && (
+                                                                            <div className="p-2 bg-amber-500/10 border-t border-amber-500/20 text-amber-400 text-xs text-center">
+                                                                                Showing first 50 KB of {formatSize(item.response_body.length)}. Click &quot;Load Full&quot; to view complete content.
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
                             </div>
                         )}
 

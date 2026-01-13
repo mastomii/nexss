@@ -14,7 +14,8 @@ import {
     MinusSquare,
     ChevronDown,
     ListChecks,
-    X
+    X,
+    RefreshCw
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -57,6 +58,7 @@ export default function ReportsPage() {
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [bulkActioning, setBulkActioning] = useState(false);
     const [bulkMode, setBulkMode] = useState(false);
+    const [refreshing, setRefreshing] = useState(false);
 
     const fetchReports = async (page = 1, limit = perPage) => {
         try {
@@ -72,6 +74,21 @@ export default function ReportsPage() {
             }
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleRefresh = async () => {
+        setRefreshing(true);
+        try {
+            const res = await fetch(`/api/reports?page=${pagination.page}&limit=${perPage}&archived=${showArchived}`);
+            if (res.ok) {
+                const data = await res.json();
+                setReports(data.reports);
+                setPagination(data.pagination);
+                toast.success('Reports refreshed');
+            }
+        } finally {
+            setRefreshing(false);
         }
     };
 
@@ -261,6 +278,15 @@ export default function ReportsPage() {
                     >
                         <Archive className="w-4 h-4 mr-1.5" />
                         {showArchived ? 'Archived' : 'Archive'}
+                    </Button>
+                    <Button
+                        variant="outline"
+                        onClick={handleRefresh}
+                        disabled={refreshing}
+                        className="rounded text-xs px-3 py-1 h-8 bg-[#18181c] text-muted-foreground border border-[#27272a] hover:text-white disabled:opacity-50"
+                        title="Refresh reports"
+                    >
+                        <RefreshCw className={cn("w-4 h-4", refreshing && "animate-spin")} />
                     </Button>
                 </div>
             </div>

@@ -213,6 +213,32 @@ export const trafficPaginationSchema = z.object({
 });
 
 // ============================================
+// PATH ENUMERATION SCHEMAS
+// ============================================
+
+export const pathEnumConfigSchema = z.object({
+    path: z.string()
+        .min(1, 'Path is required')
+        .max(2000, 'Path too long')
+        .refine(val => val.startsWith('/'), 'Path must start with /'),
+    description: z.string().max(500).optional().nullable(),
+    active: z.boolean().optional(),
+});
+
+export const pathEnumResultSchema = z.object({
+    rid: ulidSchema,
+    results: z.array(z.object({
+        path: z.string().max(2000),
+        description: z.string().max(500).optional().nullable(),
+        status: z.number().int().min(0).max(999).nullable().optional(),
+        size: z.number().int().min(0).nullable().optional(),
+        body: z.string().max(50000).optional().nullable(),
+        headers: z.string().max(10000).optional().nullable(),
+        error: z.string().max(1000).optional().nullable(),
+    })).max(50), // Max 50 paths per request
+});
+
+// ============================================
 // HELPER FUNCTIONS
 // ============================================
 

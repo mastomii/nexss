@@ -125,6 +125,34 @@ CREATE INDEX IF NOT EXISTS idx_intercepted_traffic_captured_at ON intercepted_tr
 -- Composite index for efficient pagination queries: WHERE report_id = ? ORDER BY captured_at
 CREATE INDEX IF NOT EXISTS idx_intercepted_traffic_report_captured ON intercepted_traffic(report_id, captured_at DESC);
 
+-- Path enumeration config table
+CREATE TABLE IF NOT EXISTS path_enumeration_config (
+    id VARCHAR(26) PRIMARY KEY,
+    path VARCHAR(2000) NOT NULL,
+    description VARCHAR(500),
+    active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_path_enum_config_active ON path_enumeration_config(active);
+
+-- Path enumeration results table
+CREATE TABLE IF NOT EXISTS path_enumeration_results (
+    id VARCHAR(26) PRIMARY KEY,
+    report_id VARCHAR(26) NOT NULL REFERENCES reports(id) ON DELETE CASCADE,
+    path VARCHAR(2000) NOT NULL,
+    description VARCHAR(500),
+    status_code INTEGER,
+    response_size INTEGER,
+    response_body TEXT,
+    response_headers TEXT,
+    error_message TEXT,
+    fetched_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_path_enum_results_report_id ON path_enumeration_results(report_id);
+
 -- Update trigger function
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
@@ -244,6 +272,26 @@ const COLUMN_DEFINITIONS: Record<string, Record<string, string>> = {
         status_code: 'INTEGER',
         captured_at: 'TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP',
     },
+    path_enumeration_config: {
+        id: 'VARCHAR(26) PRIMARY KEY',
+        path: 'VARCHAR(2000) NOT NULL',
+        description: 'VARCHAR(500)',
+        active: 'BOOLEAN DEFAULT TRUE',
+        created_at: 'TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP',
+        updated_at: 'TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP',
+    },
+    path_enumeration_results: {
+        id: 'VARCHAR(26) PRIMARY KEY',
+        report_id: 'VARCHAR(26)',
+        path: 'VARCHAR(2000) NOT NULL',
+        description: 'VARCHAR(500)',
+        status_code: 'INTEGER',
+        response_size: 'INTEGER',
+        response_body: 'TEXT',
+        response_headers: 'TEXT',
+        error_message: 'TEXT',
+        fetched_at: 'TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP',
+    },
 };
 
 // Index definitions for creating missing indexes
@@ -267,6 +315,9 @@ const INDEX_DEFINITIONS: Record<string, string> = {
     idx_intercepted_traffic_report_id: 'CREATE INDEX IF NOT EXISTS idx_intercepted_traffic_report_id ON intercepted_traffic(report_id)',
     idx_intercepted_traffic_captured_at: 'CREATE INDEX IF NOT EXISTS idx_intercepted_traffic_captured_at ON intercepted_traffic(captured_at)',
     idx_intercepted_traffic_report_captured: 'CREATE INDEX IF NOT EXISTS idx_intercepted_traffic_report_captured ON intercepted_traffic(report_id, captured_at DESC)',
+    // Path enumeration indexes
+    idx_path_enum_config_active: 'CREATE INDEX IF NOT EXISTS idx_path_enum_config_active ON path_enumeration_config(active)',
+    idx_path_enum_results_report_id: 'CREATE INDEX IF NOT EXISTS idx_path_enum_results_report_id ON path_enumeration_results(report_id)',
 };
 
 export async function POST() {

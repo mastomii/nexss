@@ -106,3 +106,25 @@ export interface Setting {
   value: string;
   updated_at: Date;
 }
+
+export interface PathEnumerationConfig {
+  id: string;
+  path: string;
+  description: string | null;
+  active: boolean;
+  created_at: Date;
+  updated_at: Date;
+}
+
+export interface PathEnumerationResult {
+  id: string;
+  report_id: string;
+  path: string;
+  description: string | null;
+  status_code: number | null;
+  response_size: number | null;
+  response_body: string | null;
+  response_headers: string | null;
+  error_message: string | null;
+  fetched_at: Date;
+}

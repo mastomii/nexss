@@ -260,9 +260,9 @@ export default function DashboardPage() {
                                     <circle cx="72" cy="72" r="60" stroke="#27272a" strokeWidth="10" fill="none" />
                                 )}
                             </svg>
-                            <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+                            <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-2">
                                 <span className="text-xl font-bold text-white">{data?.stats?.totalReports || 0}</span>
-                                <span className="text-xs text-muted-foreground">Total Reports</span>
+                                <span className="text-[10px] text-muted-foreground leading-tight">Total</span>
                             </div>
                         </div>
                     </div>

@@ -144,6 +144,38 @@ const EXPECTED_SCHEMA: TableSchema[] = [
             'idx_intercepted_traffic_report_captured', // Composite index for pagination
         ],
     },
+    {
+        name: 'path_enumeration_config',
+        columns: [
+            { name: 'id', type: 'character varying' },
+            { name: 'path', type: 'character varying' },
+            { name: 'description', type: 'character varying' },
+            { name: 'active', type: 'boolean' },
+            { name: 'created_at', type: 'timestamp with time zone' },
+            { name: 'updated_at', type: 'timestamp with time zone' },
+        ],
+        indexes: [
+            'idx_path_enum_config_active',
+        ],
+    },
+    {
+        name: 'path_enumeration_results',
+        columns: [
+            { name: 'id', type: 'character varying' },
+            { name: 'report_id', type: 'character varying' },
+            { name: 'path', type: 'character varying' },
+            { name: 'description', type: 'character varying' },
+            { name: 'status_code', type: 'integer' },
+            { name: 'response_size', type: 'integer' },
+            { name: 'response_body', type: 'text' },
+            { name: 'response_headers', type: 'text' },
+            { name: 'error_message', type: 'text' },
+            { name: 'fetched_at', type: 'timestamp with time zone' },
+        ],
+        indexes: [
+            'idx_path_enum_results_report_id',
+        ],
+    },
 ];
 
 /**
