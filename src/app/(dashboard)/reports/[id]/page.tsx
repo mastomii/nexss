@@ -1554,7 +1554,7 @@ export default function ReportDetailPage() {
 
             {/* IP Info Modal */}
             {showIpInfo && parsedIpInfo && (
-                <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setShowIpInfo(false)}>
+                <div className="fixed inset-0 bg-black/85 flex items-center justify-center z-50" onClick={() => setShowIpInfo(false)}>
                     <div 
                         className="bg-[#18181c] border border-[#27272a] rounded-lg w-full max-w-md mx-4 overflow-hidden animate-in zoom-in-95"
                         onClick={(e) => e.stopPropagation()}
