@@ -61,6 +61,7 @@ interface ReportData {
     screenshot_error: string | null;
     localstorage: string | null;
     sessionstorage: string | null;
+    extra?: Record<string, unknown> | null;
 }
 
 interface FullReport {
@@ -684,6 +685,11 @@ export default function ReportDetailPage() {
                         <div className="flex items-center gap-2">
                             <ImageIcon className="w-4 h-4 text-muted-foreground" />
                             <h3 className="text-sm font-medium text-white">Screenshot</h3>
+                            {typeof report.data?.extra?.screenWidth === 'number' && typeof report.data?.extra?.screenHeight === 'number' && (
+                                <Badge variant="secondary" className="text-xs bg-violet-500/20 text-violet-400 border-none">
+                                    {report.data.extra.screenWidth} × {report.data.extra.screenHeight}
+                                </Badge>
+                            )}
                         </div>
                         {report.data?.screenshot && (
                             <button

