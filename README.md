@@ -50,7 +50,9 @@ When your XSS payload triggers on a vulnerable application, NeXSS captures compr
 | Storage Extraction | Captures localStorage and sessionStorage data |
 | Request Details | Logs URL, origin, referer, user-agent, and IP address |
 | Persistent Sessions | Maintain connection with compromised browsers for JS command execution |
-| **Traffic Interception** | **NEW** - Observe HTTP requests/responses within victim's browser session |
+| Traffic Interception | Observe HTTP requests/responses within victim's browser session |
+| **Path Enumeration** | **NEW** - Automatically probe sensitive paths and capture responses |
+| **Grouped View** | **NEW** - Organize reports by origin/domain for better analysis |
 | AES-256 Encryption | Secure communication channel for persistent sessions |
 | Telegram Notifications | Real-time alerts with screenshots when XSS triggers |
 | Object Storage | Store screenshots in S3, MinIO, or Cloudflare R2 |
@@ -160,6 +162,22 @@ All captured XSS triggers are displayed in the Reports page with filtering and s
   <em>Reports list with timestamps and victim information</em>
 </p>
 
+#### Grouped View (NEW)
+
+Switch to **Grouped View** to organize reports by origin/domain. This helps analyze attacks across multiple pages of the same target:
+
+<p align="center">
+  <img src="images/nexss-grouped-view.png" alt="Grouped View" width="100%">
+  <br>
+  <em>Reports grouped by origin with expand/collapse and unread counts</em>
+</p>
+
+Key features:
+- **Group by Origin** - Reports organized by domain/hostname
+- **Expand/Collapse** - Click to view reports within each group
+- **Statistics per Group** - Total reports and unread count
+- **Pagination** - Navigate through groups efficiently
+
 Click on any report to view detailed information:
 
 <p align="center">
@@ -184,20 +202,26 @@ Enable persistent mode to maintain a connection with compromised browsers. This 
 
 > **Note:** AES encryption for persistent sessions requires the target page to be served over HTTPS (Web Crypto API limitation). On HTTP targets, commands are sent unencrypted.
 
-### Traffic Interception (NEW)
+### Traffic Interception
 
 **Traffic Interception** allows you to observe HTTP requests and responses happening within the victim's browser session. This feature provides visibility into API calls, form submissions, and navigation events.
 
-<p align="left">
-  <img src="https://github.com/mastomii/nexss/blob/main/images/nexss-traffic-interception-1.png?raw=true)" alt="NeXSS Traffic Interception" width="800">
+<p align="center">
+  <img src="images/nexss-traffic-interception-1.png" alt="NeXSS Traffic Interception" width="100%">
+  <br>
+  <em>Traffic interception showing captured HTTP requests</em>
 </p>
 
-<p align="left">
-  <img src="https://github.com/mastomii/nexss/blob/main/images/nexss-traffic-interception-2.png?raw=true)" alt="NeXSS Traffic Interception" width="800">
+<p align="center">
+  <img src="images/nexss-traffic-interception-2.png" alt="NeXSS Traffic Interception" width="100%">
+  <br>
+  <em>Request and response details with headers</em>
 </p>
 
-<p align="left">
-  <img src="https://github.com/mastomii/nexss/blob/main/images/nexss-traffic-interception-3.png?raw=true)" alt="NeXSS Traffic Interception" width="800">
+<p align="center">
+  <img src="images/nexss-traffic-interception-3.png" alt="NeXSS Traffic Interception" width="100%">
+  <br>
+  <em>Copy raw HTTP request/response for external tools</em>
 </p>
 
 #### What It Captures
@@ -235,6 +259,52 @@ Enable persistent mode to maintain a connection with compromised browsers. This 
 - **Body Size Limits** - Request/response bodies truncated to 10KB
 
 > **Note:** Traffic Interception is marked as **Experimental**. This is application-layer observation only, not network-level packet capture.
+
+### Path Enumeration (NEW)
+
+**Path Enumeration** automatically probes predefined sensitive paths on the target origin when XSS triggers. This helps discover hidden endpoints, configuration files, and internal resources.
+
+<p align="center">
+  <img src="images/nexss-path-enumeration-1.png" alt="Path Enumeration Configuration" width="100%">
+  <br>
+  <em>Configure paths to enumerate in Payloads page</em>
+</p>
+
+<p align="center">
+  <img src="images/nexss-path-enumeration-2.png" alt="Path Enumeration Results" width="100%">
+  <br>
+  <em>Enumeration results showing status codes and response sizes</em>
+</p>
+
+<p align="center">
+  <img src="images/nexss-path-enumeration-3.png" alt="Path Enumeration Response" width="100%">
+  <br>
+  <em>View full response body and headers for each path</em>
+</p>
+
+#### How to Use
+
+1. Go to **Payloads** page
+2. Scroll to **Path Enumeration** section
+3. Add paths to probe (e.g., `/robots.txt`, `/admin`, `/.env`)
+4. When XSS triggers, paths are fetched from victim's browser
+5. View results in report detail under **Enumeration** tab
+
+#### What It Captures
+
+| Data | Description |
+|------|-------------|
+| Status Code | HTTP response status (200, 403, 404, etc.) |
+| Response Size | Size of the response body in bytes |
+| Response Body | First 10KB of response content |
+| Headers | HTTP response headers |
+
+#### Benefits
+
+- **Same-Origin Context** - Requests are made from victim's browser, bypassing IP-based restrictions
+- **Authenticated Requests** - Uses victim's cookies and session
+- **Internal Discovery** - Access internal endpoints not visible externally
+- **Configurable Paths** - Add custom paths per engagement
 
 ## Configuration
 

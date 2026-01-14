@@ -23,6 +23,9 @@ interface CallbackData {
     sessionstorage?: string;
     'user-agent'?: string;
     ip?: string;
+    ip_info?: string;
+    screenWidth?: number;
+    screenHeight?: number;
     extra?: Record<string, unknown>;
 }
 
@@ -123,8 +126,8 @@ export async function POST(request: NextRequest) {
 
         // Create report
         await query(
-            `INSERT INTO reports (id, uri, origin, referer, user_agent, ip, cookies)
-             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+            `INSERT INTO reports (id, uri, origin, referer, user_agent, ip, ip_info, cookies)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
             [
                 reportId,
                 data.uri?.substring(0, 2000) || null,
@@ -132,6 +135,7 @@ export async function POST(request: NextRequest) {
                 data.referer?.substring(0, 2000) || null,
                 userAgent.substring(0, 1000) || null,
                 reportIP.substring(0, 100) || null,
+                data.ip_info || null,
                 data.cookies || null,
             ]
         );
@@ -251,6 +255,14 @@ export async function POST(request: NextRequest) {
         // screenshot column now stores path (for local/s3) or null
         // screenshot_storage indicates where it's stored: 'local', 's3', 'db' (legacy), or null
         const reportDataId = generateId();
+        
+        // Build extra object with screen size and any additional data
+        const extraData: Record<string, unknown> = {
+            ...(data.extra || {}),
+        };
+        if (data.screenWidth) extraData.screenWidth = data.screenWidth;
+        if (data.screenHeight) extraData.screenHeight = data.screenHeight;
+        
         await query(
             `INSERT INTO reports_data (id, report_id, dom, screenshot, screenshot_storage, screenshot_error, localstorage, sessionstorage, extra, compressed)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
@@ -263,7 +275,7 @@ export async function POST(request: NextRequest) {
                 data.screenshot_error || null,
                 data.localstorage || null,
                 data.sessionstorage || null,
-                data.extra ? JSON.stringify(data.extra) : null,
+                Object.keys(extraData).length > 0 ? JSON.stringify(extraData) : null,
                 compressed,
             ]
         );

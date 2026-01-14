@@ -81,6 +81,7 @@ export interface Report {
   referer: string | null;
   user_agent: string | null;
   ip: string | null;
+  ip_info: string | null; // JSON from ipinfo.io
   triggered_at: Date;
   archived: boolean;
   read: boolean;
@@ -105,4 +106,26 @@ export interface Setting {
   key: string;
   value: string;
   updated_at: Date;
+}
+
+export interface PathEnumerationConfig {
+  id: string;
+  path: string;
+  description: string | null;
+  active: boolean;
+  created_at: Date;
+  updated_at: Date;
+}
+
+export interface PathEnumerationResult {
+  id: string;
+  report_id: string;
+  path: string;
+  description: string | null;
+  status_code: number | null;
+  response_size: number | null;
+  response_body: string | null;
+  response_headers: string | null;
+  error_message: string | null;
+  fetched_at: Date;
 }

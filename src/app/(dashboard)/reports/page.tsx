@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import {
     Eye,
@@ -13,8 +13,12 @@ import {
     Square,
     MinusSquare,
     ChevronDown,
+    ChevronRight,
     ListChecks,
-    X
+    X,
+    RefreshCw,
+    List,
+    Layers
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -34,6 +38,13 @@ interface Report {
     archived: boolean;
 }
 
+interface GroupedOrigin {
+    origin: string;
+    report_count: number;
+    unread_count: number;
+    latest_triggered: string;
+}
+
 interface Pagination {
     page: number;
     limit: number;
@@ -41,9 +52,12 @@ interface Pagination {
     totalPages: number;
 }
 
+type ViewMode = 'table' | 'grouped';
+
 export default function ReportsPage() {
     const { formatDateTime } = useSettings();
     const [reports, setReports] = useState<Report[]>([]);
+    const [groups, setGroups] = useState<GroupedOrigin[]>([]);
     const [pagination, setPagination] = useState<Pagination>({ page: 1, limit: 10, total: 0, totalPages: 0 });
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
@@ -53,32 +67,112 @@ export default function ReportsPage() {
     const [perPage, setPerPage] = useState(10);
     const [showPerPageDropdown, setShowPerPageDropdown] = useState(false);
     
+    // View mode state
+    const [viewMode, setViewMode] = useState<ViewMode>('table');
+    const [expandedOrigins, setExpandedOrigins] = useState<Set<string>>(new Set());
+    const [originReports, setOriginReports] = useState<Record<string, Report[]>>({});
+    const [loadingOrigins, setLoadingOrigins] = useState<Set<string>>(new Set());
+    
     // Bulk selection state
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [bulkActioning, setBulkActioning] = useState(false);
     const [bulkMode, setBulkMode] = useState(false);
+    const [refreshing, setRefreshing] = useState(false);
 
     const fetchReports = async (page = 1, limit = perPage) => {
         try {
             setLoading(true);
-            const res = await fetch(`/api/reports?page=${page}&limit=${limit}&archived=${showArchived}`);
-            if (res.ok) {
-                const data = await res.json();
-                setReports(data.reports);
-                setPagination(data.pagination);
-                // Clear selection when data changes
-                setSelectedIds(new Set());
-                setBulkMode(false);
+            if (viewMode === 'grouped') {
+                const res = await fetch(`/api/reports?page=${page}&limit=${limit}&archived=${showArchived}&grouped=true`);
+                if (res.ok) {
+                    const data = await res.json();
+                    setGroups(data.groups);
+                    setPagination(data.pagination);
+                    // Clear expanded and origin reports when data changes
+                    setExpandedOrigins(new Set());
+                    setOriginReports({});
+                }
+            } else {
+                const res = await fetch(`/api/reports?page=${page}&limit=${limit}&archived=${showArchived}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    setReports(data.reports);
+                    setPagination(data.pagination);
+                }
             }
+            // Clear selection when data changes
+            setSelectedIds(new Set());
+            setBulkMode(false);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const fetchOriginReports = useCallback(async (origin: string) => {
+        setLoadingOrigins(prev => new Set(prev).add(origin));
+        try {
+            const res = await fetch(`/api/reports?origin=${encodeURIComponent(origin)}&archived=${showArchived}&limit=20`);
+            if (res.ok) {
+                const data = await res.json();
+                setOriginReports(prev => ({ ...prev, [origin]: data }));
+            }
+        } finally {
+            setLoadingOrigins(prev => {
+                const next = new Set(prev);
+                next.delete(origin);
+                return next;
+            });
+        }
+    }, [showArchived]);
+
+    const toggleOriginExpand = useCallback((origin: string) => {
+        setExpandedOrigins(prev => {
+            const next = new Set(prev);
+            if (next.has(origin)) {
+                next.delete(origin);
+            } else {
+                next.add(origin);
+                // Fetch reports for this origin if not already loaded
+                if (!originReports[origin]) {
+                    fetchOriginReports(origin);
+                }
+            }
+            return next;
+        });
+    }, [originReports, fetchOriginReports]);
+
+    const handleRefresh = async () => {
+        setRefreshing(true);
+        try {
+            if (viewMode === 'grouped') {
+                const res = await fetch(`/api/reports?page=${pagination.page}&limit=${perPage}&archived=${showArchived}&grouped=true`);
+                if (res.ok) {
+                    const data = await res.json();
+                    setGroups(data.groups);
+                    setPagination(data.pagination);
+                    // Clear expanded origins to refresh data
+                    setExpandedOrigins(new Set());
+                    setOriginReports({});
+                    toast.success('Reports refreshed');
+                }
+            } else {
+                const res = await fetch(`/api/reports?page=${pagination.page}&limit=${perPage}&archived=${showArchived}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    setReports(data.reports);
+                    setPagination(data.pagination);
+                    toast.success('Reports refreshed');
+                }
+            }
+        } finally {
+            setRefreshing(false);
         }
     };
 
     useEffect(() => {
         fetchReports(1, perPage);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [showArchived, perPage]);
+    }, [showArchived, perPage, viewMode]);
 
     const handleArchive = async (id: string, archived: boolean) => {
         const res = await apiPatch(`/api/reports/${id}`, { archived });
@@ -244,12 +338,41 @@ export default function ReportsPage() {
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                             className="w-full bg-[#18181c] text-sm text-white placeholder-muted-foreground/70 rounded py-1.5 pl-9 pr-3 border border-[#27272a] focus:ring-1 focus:ring-[#3f3f46] focus:outline-none"
+                            disabled={viewMode === 'grouped'}
                         />
+                    </div>
+                    {/* View Mode Switcher */}
+                    <div className="flex rounded border border-[#27272a] overflow-hidden">
+                        <button
+                            onClick={() => setViewMode('table')}
+                            className={cn(
+                                "flex items-center gap-1.5 px-3 py-1.5 text-xs transition-colors",
+                                viewMode === 'table' 
+                                    ? "bg-indigo-500/20 text-indigo-400" 
+                                    : "bg-[#18181c] text-muted-foreground hover:text-white"
+                            )}
+                            title="Table View"
+                        >
+                            <List className="w-4 h-4" />
+                        </button>
+                        <button
+                            onClick={() => setViewMode('grouped')}
+                            className={cn(
+                                "flex items-center gap-1.5 px-3 py-1.5 text-xs transition-colors border-l border-[#27272a]",
+                                viewMode === 'grouped' 
+                                    ? "bg-violet-500/20 text-violet-400" 
+                                    : "bg-[#18181c] text-muted-foreground hover:text-white"
+                            )}
+                            title="Grouped View"
+                        >
+                            <Layers className="w-4 h-4" />
+                        </button>
                     </div>
                     <Button
                         variant={bulkMode ? "secondary" : "outline"}
                         onClick={() => { setBulkMode(!bulkMode); if (bulkMode) setSelectedIds(new Set()); }}
                         className={cn("rounded text-xs px-3 py-1 h-8", bulkMode ? "bg-indigo-500/10 text-indigo-400 border-indigo-500/20" : "bg-[#18181c] text-muted-foreground border border-[#27272a] hover:text-white")}
+                        disabled={viewMode === 'grouped'}
                     >
                         {bulkMode ? <X className="w-4 h-4 mr-1.5" /> : <ListChecks className="w-4 h-4 mr-1.5" />}
                         {bulkMode ? 'Cancel' : 'Bulk'}
@@ -261,6 +384,15 @@ export default function ReportsPage() {
                     >
                         <Archive className="w-4 h-4 mr-1.5" />
                         {showArchived ? 'Archived' : 'Archive'}
+                    </Button>
+                    <Button
+                        variant="outline"
+                        onClick={handleRefresh}
+                        disabled={refreshing}
+                        className="rounded text-xs px-3 py-1 h-8 bg-[#18181c] text-muted-foreground border border-[#27272a] hover:text-white disabled:opacity-50"
+                        title="Refresh reports"
+                    >
+                        <RefreshCw className={cn("w-4 h-4", refreshing && "animate-spin")} />
                     </Button>
                 </div>
             </div>
@@ -303,7 +435,173 @@ export default function ReportsPage() {
                 </div>
             )}
 
-            {/* Custom Table Implementation to Match Reference Image */}
+            {/* Grouped View */}
+            {viewMode === 'grouped' ? (
+                <div className="bg-[#18181c] rounded-lg overflow-hidden p-4 border border-[#27272a]">
+                    {/* Grouped Header */}
+                    <div className="grid gap-4 mb-4 px-3 grid-cols-[24px_minmax(100px,1fr)_80px_80px_180px]">
+                        <span></span>
+                        <span className="text-muted-foreground/50 text-xs uppercase tracking-wider font-semibold">Origin</span>
+                        <span className="text-muted-foreground/50 text-xs uppercase tracking-wider font-semibold text-center">Reports</span>
+                        <span className="text-muted-foreground/50 text-xs uppercase tracking-wider font-semibold text-center">Unread</span>
+                        <span className="text-muted-foreground/50 text-xs uppercase tracking-wider font-semibold">Latest</span>
+                    </div>
+
+                    <div className="space-y-1">
+                        {loading ? (
+                            <div className="py-12 text-center text-muted-foreground text-sm">Loading...</div>
+                        ) : groups.length === 0 ? (
+                            <div className="py-12 text-center text-muted-foreground text-sm">No reports found</div>
+                        ) : (
+                            groups.map((group) => (
+                                <div key={group.origin} className="border-b border-[#27272a] last:border-b-0">
+                                    {/* Group Header Row */}
+                                    <div 
+                                        onClick={() => toggleOriginExpand(group.origin)}
+                                        className={cn(
+                                            "grid gap-4 py-2.5 px-3 rounded transition-colors items-center cursor-pointer",
+                                            "grid-cols-[24px_minmax(100px,1fr)_80px_80px_180px]",
+                                            expandedOrigins.has(group.origin) ? "bg-violet-500/5" : "hover:bg-white/5"
+                                        )}
+                                    >
+                                        <div className="flex items-center justify-center">
+                                            {expandedOrigins.has(group.origin) ? (
+                                                <ChevronDown className="w-4 h-4 text-violet-400" />
+                                            ) : (
+                                                <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                                            )}
+                                        </div>
+                                        <div className="flex items-center gap-2 overflow-hidden">
+                                            <div className="h-7 w-7 rounded min-w-[28px] bg-violet-500/10 flex items-center justify-center text-violet-500">
+                                                <Layers className="h-3.5 w-3.5" />
+                                            </div>
+                                            <span className="text-white font-medium truncate text-sm">{group.origin}</span>
+                                        </div>
+                                        <span className="text-white/70 text-sm font-mono text-center">{group.report_count}</span>
+                                        <span className={cn(
+                                            "text-sm font-mono text-center",
+                                            group.unread_count > 0 ? "text-emerald-400" : "text-white/30"
+                                        )}>
+                                            {group.unread_count}
+                                        </span>
+                                        <span className="text-white/50 text-sm font-mono whitespace-nowrap">
+                                            {formatDateTime(group.latest_triggered)}
+                                        </span>
+                                    </div>
+
+                                    {/* Expanded Reports */}
+                                    {expandedOrigins.has(group.origin) && (
+                                        <div className="bg-white/[0.02] border-t border-[#27272a]">
+                                            {loadingOrigins.has(group.origin) ? (
+                                                <div className="py-4 text-center text-muted-foreground text-xs">Loading reports...</div>
+                                            ) : originReports[group.origin]?.length ? (
+                                                <div className="divide-y divide-[#27272a]/50">
+                                                    {originReports[group.origin].map((report, idx) => (
+                                                        <div 
+                                                            key={report.id}
+                                                            className="grid gap-4 py-2 px-3 pl-10 items-center hover:bg-white/5 transition-colors grid-cols-[35px_minmax(80px,1fr)_130px_60px_180px_70px]"
+                                                        >
+                                                            <span className="text-white/30 text-xs font-mono">#{idx + 1}</span>
+                                                            <Link href={`/reports/${report.id}`} className="flex items-center gap-2 overflow-hidden group cursor-pointer">
+                                                                <div className="h-6 w-6 rounded min-w-[24px] bg-indigo-500/10 flex items-center justify-center text-indigo-500">
+                                                                    <Shield className="h-3 w-3" />
+                                                                </div>
+                                                                <span className="text-white/80 truncate text-xs group-hover:text-indigo-400 transition-colors font-mono">{report.uri || '/'}</span>
+                                                            </Link>
+                                                            <span className="text-white/50 text-xs font-mono truncate">{report.ip || '::1'}</span>
+                                                            <div>
+                                                                {report.archived ? (
+                                                                    <span className="px-1.5 py-0.5 rounded bg-[#2e241d] text-[#fbbf24] text-[10px] font-medium">Archived</span>
+                                                                ) : !report.read ? (
+                                                                    <span className="px-1.5 py-0.5 rounded bg-[#1c2e26] text-[#34d399] text-[10px] font-medium">New</span>
+                                                                ) : (
+                                                                    <span className="px-1.5 py-0.5 rounded bg-[#251e36] text-[#a78bfa] text-[10px] font-medium">Viewed</span>
+                                                                )}
+                                                            </div>
+                                                            <span className="text-white/40 text-xs font-mono whitespace-nowrap">
+                                                                {formatDateTime(report.triggered_at)}
+                                                            </span>
+                                                            <div className="flex justify-end gap-1">
+                                                                <Link href={`/reports/${report.id}`} className="h-6 w-6 flex items-center justify-center rounded text-muted-foreground hover:text-white hover:bg-white/10 transition-colors" title="View">
+                                                                    <Eye className="h-3.5 w-3.5" />
+                                                                </Link>
+                                                                <button
+                                                                    onClick={(e) => { e.stopPropagation(); handleArchive(report.id, !report.archived); }}
+                                                                    className={cn(
+                                                                        "h-6 w-6 flex items-center justify-center rounded transition-colors",
+                                                                        report.archived 
+                                                                            ? "text-orange-400 hover:text-orange-300 hover:bg-orange-400/10" 
+                                                                            : "text-muted-foreground hover:text-orange-400 hover:bg-orange-400/10"
+                                                                    )}
+                                                                    title={report.archived ? "Unarchive" : "Archive"}
+                                                                >
+                                                                    <Archive className="h-3.5 w-3.5" />
+                                                                </button>
+                                                                <button
+                                                                    onClick={(e) => { e.stopPropagation(); openDeleteModal(report); }}
+                                                                    className="h-6 w-6 flex items-center justify-center rounded text-muted-foreground hover:text-red-400 hover:bg-red-400/10 transition-colors"
+                                                                    title="Delete"
+                                                                >
+                                                                    <Trash2 className="h-3.5 w-3.5" />
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                <div className="py-4 text-center text-muted-foreground text-xs">No reports</div>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            ))
+                        )}
+                    </div>
+
+                    {/* Pagination for Groups */}
+                    <div className="mt-6 flex items-center justify-between">
+                        <div className="relative">
+                            <button
+                                onClick={() => setShowPerPageDropdown(!showPerPageDropdown)}
+                                className="flex items-center gap-2 px-3 py-1.5 rounded bg-[#27272a] text-white text-sm hover:bg-[#3f3f46] transition-colors"
+                            >
+                                <span>{perPage} per page</span>
+                                <ChevronDown className="w-4 h-4" />
+                            </button>
+                            {showPerPageDropdown && (
+                                <>
+                                    <div className="fixed inset-0 z-10" onClick={() => setShowPerPageDropdown(false)} />
+                                    <div className="absolute left-0 bottom-full mb-1 bg-[#27272a] border border-[#3f3f46] rounded-lg py-1 min-w-[100px] z-20 shadow-xl">
+                                        {[10, 20, 50, 100].map((n) => (
+                                            <button
+                                                key={n}
+                                                onClick={() => { setPerPage(n); setShowPerPageDropdown(false); }}
+                                                className={cn(
+                                                    "w-full px-3 py-1.5 text-left text-sm hover:bg-white/10 transition-colors",
+                                                    perPage === n ? "text-violet-400" : "text-white"
+                                                )}
+                                            >
+                                                {n} per page
+                                            </button>
+                                        ))}
+                                    </div>
+                                </>
+                            )}
+                        </div>
+
+                        {pagination.totalPages > 1 && (
+                            <div className="flex gap-2">
+                                <Button variant="outline" size="sm" onClick={() => fetchReports(pagination.page - 1, perPage)} disabled={pagination.page === 1} className="rounded border-[#27272a] bg-transparent text-white text-sm h-8 px-3">Previous</Button>
+                                <span className="flex items-center text-sm text-muted-foreground px-2">
+                                    Page {pagination.page} of {pagination.totalPages}
+                                </span>
+                                <Button variant="outline" size="sm" onClick={() => fetchReports(pagination.page + 1, perPage)} disabled={pagination.page === pagination.totalPages} className="rounded border-[#27272a] bg-transparent text-white text-sm h-8 px-3">Next</Button>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            ) : (
+            /* Custom Table Implementation to Match Reference Image */
             <div className="bg-[#18181c] rounded-lg overflow-hidden p-4 border border-[#27272a]">
                 {/* Table Header */}
                 <div className={cn(
@@ -465,6 +763,7 @@ export default function ReportsPage() {
                     )}
                 </div>
             </div>
+            )}
         </div>
     );
 }

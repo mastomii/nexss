@@ -64,3 +64,6 @@ export type {
     ThumbnailConfig,
     ProcessedScreenshot,
 } from './screenshot.service';
+
+// Path Enumeration service
+export * as PathEnumerationService from './path-enumeration.service';

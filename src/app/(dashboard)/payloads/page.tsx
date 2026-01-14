@@ -13,7 +13,11 @@ import {
     Shield,
     Lock,
     FlaskConical,
-    Radio
+    Radio,
+    Plus,
+    Trash2,
+    Network,
+    Camera
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -22,7 +26,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import { apiPut } from '@/lib/api-client';
+import { apiPut, apiPost, apiDelete, apiPatch } from '@/lib/api-client';
 import { toast } from 'sonner';
 
 type TabType = 'settings' | 'payloads' | 'notes';
@@ -33,6 +37,13 @@ interface SettingsData {
     persistent_key: string;
     advanced_persistent_enabled: string;
     notes: string;
+}
+
+interface PathEnumConfig {
+    id: string;
+    path: string;
+    description: string | null;
+    active: boolean;
 }
 
 export default function PayloadsPage() {
@@ -50,10 +61,17 @@ export default function PayloadsPage() {
     });
     const [generatingKey, setGeneratingKey] = useState(false);
 
+    // Path Enumeration state
+    const [pathConfigs, setPathConfigs] = useState<PathEnumConfig[]>([]);
+    const [newPath, setNewPath] = useState('');
+    const [newPathDescription, setNewPathDescription] = useState('');
+    const [addingPath, setAddingPath] = useState(false);
+
     const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
 
     useEffect(() => {
         fetchSettings();
+        fetchPathConfigs();
     }, []);
 
     const fetchSettings = async () => {
@@ -72,6 +90,79 @@ export default function PayloadsPage() {
             }
         } finally {
             setLoading(false);
+        }
+    };
+
+    const fetchPathConfigs = async () => {
+        try {
+            const res = await fetch('/api/enumeration');
+            if (res.ok) {
+                const data = await res.json();
+                setPathConfigs(data);
+            }
+        } catch (err) {
+            console.error('Failed to fetch path configs:', err);
+        }
+    };
+
+    const handleAddPath = async () => {
+        if (!newPath.trim()) {
+            toast.error('Path is required');
+            return;
+        }
+        if (!newPath.startsWith('/')) {
+            toast.error('Path must start with /');
+            return;
+        }
+
+        setAddingPath(true);
+        try {
+            const res = await apiPost('/api/enumeration', {
+                path: newPath.trim(),
+                description: newPathDescription.trim() || null,
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setPathConfigs([...pathConfigs, data]);
+                setNewPath('');
+                setNewPathDescription('');
+                toast.success('Path added');
+            } else {
+                const err = await res.json();
+                toast.error(err.error || 'Failed to add path');
+            }
+        } catch {
+            toast.error('Something went wrong');
+        } finally {
+            setAddingPath(false);
+        }
+    };
+
+    const handleTogglePath = async (id: string) => {
+        try {
+            const res = await apiPatch('/api/enumeration', { id });
+            if (res.ok) {
+                const updated = await res.json();
+                setPathConfigs(pathConfigs.map(p => p.id === id ? updated : p));
+            } else {
+                toast.error('Failed to toggle path');
+            }
+        } catch {
+            toast.error('Something went wrong');
+        }
+    };
+
+    const handleDeletePath = async (id: string) => {
+        try {
+            const res = await apiDelete('/api/enumeration', { id });
+            if (res.ok) {
+                setPathConfigs(pathConfigs.filter(p => p.id !== id));
+                toast.success('Path deleted');
+            } else {
+                toast.error('Failed to delete path');
+            }
+        } catch {
+            toast.error('Something went wrong');
         }
     };
 
@@ -225,7 +316,10 @@ export default function PayloadsPage() {
                     <CardContent className="p-4 space-y-4">
                         <div className="flex items-center justify-between">
                             <div className="space-y-0.5">
-                                <h3 className="font-medium text-sm">Screenshot Capture</h3>
+                                <div className="flex items-center gap-2">
+                                    <Camera className="w-4 h-4 text-violet-500" />
+                                    <h3 className="font-medium text-sm">Screenshot Capture</h3>
+                                </div>
                                 <p className="text-sm text-muted-foreground">
                                     Capture screenshot of victim&apos;s page when XSS triggers
                                 </p>
@@ -238,7 +332,8 @@ export default function PayloadsPage() {
 
                         <div className="flex items-center justify-between border-t border-white/5 pt-4">
                             <div className="space-y-0.5">
-                                <div className="flex items-center gap-1.5">
+                                <div className="flex items-center gap-2">
+                                    <Radio className="w-4 h-4 text-violet-500" />
                                     <h3 className="font-medium text-sm">Persistent Mode</h3>
                                 </div>
                                 <p className="text-sm text-muted-foreground">
@@ -346,6 +441,84 @@ export default function PayloadsPage() {
                                 </div>
                             </div>
                         )}
+
+                        {/* Path Enumeration Section */}
+                        <div className="border-t border-white/5 pt-4">
+                            <div className="flex items-center gap-2 mb-3">
+                                <Network className="w-4 h-4 text-violet-500" />
+                                <h3 className="font-medium text-sm">Path Enumeration</h3>
+                                {pathConfigs.filter(p => p.active).length > 0 && (
+                                    <Badge variant="secondary" className="text-xs h-5 px-1.5 bg-violet-500/10 text-violet-500 border-none">
+                                        {pathConfigs.filter(p => p.active).length} Active
+                                    </Badge>
+                                )}
+                            </div>
+                            <p className="text-sm text-muted-foreground mb-3">
+                                Automatically enumerate these paths on the target domain and capture responses
+                            </p>
+
+                            {/* Add new path form */}
+                            <div className="flex gap-2 mb-3">
+                                <Input
+                                    value={newPath}
+                                    onChange={(e) => setNewPath(e.target.value)}
+                                    placeholder="/api/users"
+                                    className="bg-[#09090b] border-white/10 text-white font-mono text-sm focus:border-emerald-500/50"
+                                />
+                                <Input
+                                    value={newPathDescription}
+                                    onChange={(e) => setNewPathDescription(e.target.value)}
+                                    placeholder="Description (optional)"
+                                    className="bg-[#09090b] border-white/10 text-white text-sm focus:border-emerald-500/50"
+                                />
+                                <Button
+                                    onClick={handleAddPath}
+                                    disabled={addingPath || !newPath.trim()}
+                                    variant="outline"
+                                    size="icon"
+                                    className="shrink-0 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10 h-9 w-9"
+                                >
+                                    {addingPath ? (
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                    ) : (
+                                        <Plus className="w-4 h-4" />
+                                    )}
+                                </Button>
+                            </div>
+
+                            {/* Path list */}
+                            {pathConfigs.length > 0 && (
+                                <div className="space-y-2 max-h-[280px] overflow-y-auto">
+                                    {pathConfigs.map((config) => (
+                                        <div
+                                            key={config.id}
+                                            className={cn(
+                                                "flex items-center gap-3 p-2.5 rounded bg-[#09090b] border border-white/5",
+                                                !config.active && "opacity-50"
+                                            )}
+                                        >
+                                            <Switch
+                                                checked={config.active}
+                                                onCheckedChange={() => handleTogglePath(config.id)}
+                                                className="shrink-0"
+                                            />
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-sm font-mono text-white truncate">{config.path}</p>
+                                                {config.description && (
+                                                    <p className="text-xs text-muted-foreground truncate">{config.description}</p>
+                                                )}
+                                            </div>
+                                            <button
+                                                onClick={() => handleDeletePath(config.id)}
+                                                className="p-1.5 rounded hover:bg-red-500/20 text-muted-foreground hover:text-red-400 transition-colors shrink-0"
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
 
                         <div className="bg-[#1c1c1f] border border-white/5 rounded p-3 mt-4">
                             <p className="text-sm text-muted-foreground">

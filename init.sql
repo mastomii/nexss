@@ -52,6 +52,7 @@ CREATE TABLE reports (
     -- Browser info
     user_agent VARCHAR(1000),
     ip VARCHAR(100),
+    ip_info TEXT, -- JSON from ipinfo.io
     cookies TEXT,
     -- Timestamps
     triggered_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -155,6 +156,38 @@ CREATE INDEX idx_intercepted_traffic_report_id ON intercepted_traffic(report_id)
 CREATE INDEX idx_intercepted_traffic_captured_at ON intercepted_traffic(captured_at);
 -- Composite index for efficient pagination queries: WHERE report_id = ? ORDER BY captured_at
 CREATE INDEX idx_intercepted_traffic_report_captured ON intercepted_traffic(report_id, captured_at DESC);
+
+-- ============================================
+-- PATH ENUMERATION CONFIG TABLE
+-- ============================================
+CREATE TABLE path_enumeration_config (
+    id VARCHAR(26) PRIMARY KEY, -- ULID
+    path VARCHAR(2000) NOT NULL,
+    description VARCHAR(500),
+    active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_path_enum_config_active ON path_enumeration_config(active);
+
+-- ============================================
+-- PATH ENUMERATION RESULTS TABLE
+-- ============================================
+CREATE TABLE path_enumeration_results (
+    id VARCHAR(26) PRIMARY KEY, -- ULID
+    report_id VARCHAR(26) NOT NULL REFERENCES reports(id) ON DELETE CASCADE,
+    path VARCHAR(2000) NOT NULL,
+    description VARCHAR(500),
+    status_code INTEGER,
+    response_size INTEGER,
+    response_body TEXT,
+    response_headers TEXT,
+    error_message TEXT,
+    fetched_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_path_enum_results_report_id ON path_enumeration_results(report_id);
 
 -- ============================================
 -- HELPER FUNCTIONS

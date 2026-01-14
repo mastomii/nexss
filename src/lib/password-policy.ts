@@ -8,6 +8,8 @@
  * - Entropy calculation
  */
 
+import { randomInt } from 'crypto';
+
 // ============================================
 // TYPES
 // ============================================
@@ -248,8 +250,7 @@ export function validatePassword(
  * Generate a cryptographically secure random integer
  */
 function secureRandomInt(max: number): number {
-  const crypto = require('crypto');
-  return crypto.randomInt(max);
+  return randomInt(max);
 }
 
 /**

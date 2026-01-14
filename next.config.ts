@@ -86,6 +86,30 @@ const nextConfig: NextConfig = {
           { key: 'Access-Control-Expose-Headers', value: '*' },
         ],
       },
+      {
+        source: '/api/enumeration/:path*',
+        headers: [
+          { key: 'Access-Control-Allow-Origin', value: '*' },
+          { key: 'Access-Control-Allow-Methods', value: 'GET, POST, PUT, DELETE, OPTIONS, HEAD, PATCH' },
+          { key: 'Access-Control-Allow-Headers', value: '*' },
+          { key: 'Access-Control-Allow-Credentials', value: 'true' },
+          { key: 'Access-Control-Max-Age', value: '86400' },
+          { key: 'Access-Control-Allow-Private-Network', value: 'true' },
+          { key: 'Access-Control-Expose-Headers', value: '*' },
+        ],
+      },
+      {
+        source: '/api/enumeration',
+        headers: [
+          { key: 'Access-Control-Allow-Origin', value: '*' },
+          { key: 'Access-Control-Allow-Methods', value: 'GET, POST, PUT, DELETE, OPTIONS, HEAD, PATCH' },
+          { key: 'Access-Control-Allow-Headers', value: '*' },
+          { key: 'Access-Control-Allow-Credentials', value: 'true' },
+          { key: 'Access-Control-Max-Age', value: '86400' },
+          { key: 'Access-Control-Allow-Private-Network', value: 'true' },
+          { key: 'Access-Control-Expose-Headers', value: '*' },
+        ],
+      },
     ];
   },
 };
